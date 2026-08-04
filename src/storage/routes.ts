@@ -45,6 +45,29 @@ const BLOCKED_EXTENSIONS = new Set([
   '.exe', '.dll', '.bat', '.cmd', '.sh', '.jar', '.msi', '.com', '.scr',
 ])
 
+/**
+ * Types the resource previewer may render inline, mapped from extension.
+ *
+ * The list is deliberately narrow: every entry is inert in the browsing
+ * context. `.svg` and `.html` are absent because both can execute script, and
+ * serving them inline from this origin would be a stored-XSS vector -- they are
+ * refused at upload for the same reason. Anything not listed downloads as
+ * application/octet-stream.
+ */
+const INLINE_TYPES: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.txt': 'text/plain; charset=utf-8',
+  '.csv': 'text/plain; charset=utf-8',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mp3': 'audio/mpeg',
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: config.MAX_UPLOAD_BYTES, files: 10 },
@@ -182,9 +205,30 @@ storageRouter.get('/:bucket/*', requireAuth, async (req: Request, res: Response)
     const info = await stat(absolute)
     if (!info.isFile()) throw new Error('not a file')
 
-    // Never let the browser decide to render an upload inline.
-    res.setHeader('Content-Type', 'application/octet-stream')
-    res.setHeader('Content-Disposition', 'attachment')
+    const inlineType = INLINE_TYPES[extname(key).toLowerCase()]
+
+    if (inlineType) {
+      // Rendered in the resource previewer. Only formats that cannot execute
+      // script in the page's origin are listed -- notably NOT html or svg.
+      res.setHeader('Content-Type', inlineType)
+      res.setHeader('Content-Disposition', 'inline')
+
+      // helmet sets X-Frame-Options: SAMEORIGIN globally, which stops the
+      // frontend (a different subdomain) from framing the preview at all.
+      // X-Frame-Options has no origin-list form, so it is replaced here with
+      // CSP frame-ancestors, which does -- still refusing every other site.
+      res.removeHeader('X-Frame-Options')
+      res.setHeader(
+        'Content-Security-Policy',
+        `frame-ancestors 'self' ${config.corsOrigins.join(' ')}`
+      )
+    } else {
+      // Anything unrecognised is downloaded, never rendered.
+      res.setHeader('Content-Type', 'application/octet-stream')
+      res.setHeader('Content-Disposition', 'attachment')
+    }
+
+    // Kept in both branches: stops the browser second-guessing the type we set.
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Content-Length', String(info.size))
     res.setHeader('Cache-Control', 'private, max-age=3600')
