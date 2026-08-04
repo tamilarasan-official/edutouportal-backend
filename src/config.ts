@@ -132,6 +132,25 @@ const EnvSchema = z.object({
     .default('true')
     .transform((v) => v === 'true'),
 
+  // --- Image compression -----------------------------------------------------
+  /**
+   * Re-encode uploaded images before storing them.
+   *
+   * A phone photo is several megabytes and several times larger than anything
+   * the portal displays. Off only for debugging; leaving it off means the store
+   * grows roughly ten times faster.
+   */
+  IMAGE_COMPRESSION: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  /** Longest edge, in pixels. 2560 is sharper than any view in the portal. */
+  IMAGE_MAX_DIMENSION: z.coerce.number().int().positive().default(2560),
+  /** WebP quality for photographs. 82 is visually transparent for this content. */
+  IMAGE_QUALITY: z.coerce.number().int().min(40).max(100).default(82),
+  /** Concurrent re-encodes. Each holds a decoded bitmap, so this bounds memory. */
+  IMAGE_COMPRESS_CONCURRENCY: z.coerce.number().int().positive().max(16).default(2),
+
   // Public base URL files are served from, e.g. https://api.edutou.example.com
   PUBLIC_URL: z.string().default('http://localhost:4000'),
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(25 * 1024 * 1024),

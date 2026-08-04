@@ -6,6 +6,7 @@ import { pipeline } from 'node:stream/promises'
 import { config } from '../config.js'
 import { requireAuth } from '../middleware/auth.js'
 import type { Actor } from '../query/policies.js'
+import { compressUpload, describeSaving } from './compress.js'
 import { assertSafeKey, type ByteRange } from './driver.js'
 import { storage } from './index.js'
 import {
@@ -134,21 +135,32 @@ function mayRead(bucketName: BucketName, key: string, actor: Actor): boolean {
 /**
  * `Content-Disposition` for a download, optionally naming the file.
  *
- * What is on disk is a UUID -- the original name lives in the caller's database
+ * What is stored is a UUID -- the original name lives in the caller's database
  * row -- so the client may supply one. It is reduced to a bare filename before
  * use: a newline would let a caller append headers of their own, and a slash
  * would suggest a path the response does not have.
+ *
+ * The extension is then made to match what is actually being sent. Images are
+ * re-encoded to WebP on upload, so a row still holding "photo.jpg" would
+ * otherwise save WebP bytes under a .jpg name, which some viewers refuse to
+ * open.
  */
-function attachmentDisposition(requested: unknown): string {
+function attachmentDisposition(requested: unknown, storedKey: string): string {
   if (typeof requested !== 'string') return 'attachment'
 
-  const clean = requested
+  let clean = requested
     .replace(/[\\/]/g, '_')
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f"]/g, '')
     .trim()
     .slice(0, 120)
   if (!clean) return 'attachment'
+
+  const stored = extname(storedKey).toLowerCase()
+  if (stored && extname(clean).toLowerCase() !== stored) {
+    const dot = clean.lastIndexOf('.')
+    clean = (dot > 0 ? clean.slice(0, dot) : clean) + stored
+  }
 
   // Two forms: a plain-ASCII fallback for old clients, and the encoded form
   // every current browser prefers.
@@ -234,10 +246,28 @@ storageRouter.post(
       segment(req.body?.taskId),
       segment(req.body?.stepId),
     ]
-    const filename = `${Date.now()}-${randomUUID()}${extension}`
+
+    // Re-encoded here rather than trusted from the browser: the portal
+    // compresses before uploading, but nothing stops a client skipping that.
+    // Non-images and anything that would not shrink come back untouched.
+    const compressed = await compressUpload(file.buffer, file.originalname)
+
+    // The stored extension follows the stored BYTES. A key ending .jpeg whose
+    // contents are WebP would be served as image/jpeg and render as garbage --
+    // the download route derives the type from the extension by design.
+    const filename = `${Date.now()}-${randomUUID()}${compressed.extension || extension}`
     const key = [...parts, filename].join('/')
 
-    await storage().put(bucketName, key, file.buffer, file.mimetype || 'application/octet-stream')
+    console.log(
+      `[storage] ${actor.userId} uploaded ${file.originalname}: ${describeSaving(compressed)}`
+    )
+
+    await storage().put(
+      bucketName,
+      key,
+      compressed.buffer,
+      compressed.applied ? 'image/webp' : file.mimetype || 'application/octet-stream'
+    )
     const url = `${config.PUBLIC_URL}/api/storage/${bucketName}/${key}`
     // The caller usually wants to show the file straight away, and the raw URL
     // is not fetchable from the browser on its own -- see signing.ts.
@@ -250,9 +280,18 @@ storageRouter.post(
         publicUrl: url,
         signedUrl: signed.url,
         signedUrlExpiresAt: signed.expiresAt,
-        size: file.size,
-        mimeType: file.mimetype,
+        // `size` is what is STORED, so a row records what the file now is
+        // rather than what was sent.
+        size: compressed.storedBytes,
+        mimeType: compressed.applied ? 'image/webp' : file.mimetype,
         originalName: file.originalname,
+        compression: {
+          applied: compressed.applied,
+          originalSize: compressed.originalBytes,
+          storedSize: compressed.storedBytes,
+          ...(compressed.width ? { width: compressed.width, height: compressed.height } : {}),
+          ...(compressed.reason ? { reason: compressed.reason } : {}),
+        },
       },
     })
   }
@@ -437,7 +476,7 @@ storageRouter.get('/:bucket/*', async (req: Request, res: Response) => {
   } else {
     // Anything unrecognised is downloaded, never rendered.
     res.setHeader('Content-Type', 'application/octet-stream')
-    res.setHeader('Content-Disposition', attachmentDisposition(req.query.filename))
+    res.setHeader('Content-Disposition', attachmentDisposition(req.query.filename, key))
   }
 
   // Kept in both branches: stops the browser second-guessing the type we set.

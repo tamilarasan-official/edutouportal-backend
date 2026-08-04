@@ -129,6 +129,65 @@ object and are genuinely gone — those files must be uploaded again.
 Run the dry run first and read the matches. It is safe to re-run; rows that
 already resolve are left alone.
 
+## Compression
+
+Every image is re-encoded before it is stored. This is the single largest lever
+on how fast the bucket fills: a phone photo arrives at 2-8 MB and is several
+times larger than anything the portal ever displays.
+
+Measured on generated fixtures (`sharp` 0.35, WebP q82):
+
+| Upload | Before | After | Saved |
+|---|---|---|---|
+| 12 MP phone photo (JPEG q92) | 2.4 MB | 452 KB | 82% |
+| 8 MP phone photo (JPEG q85) | 1.0 MB | 358 KB | 65% |
+| Scanned page (PNG, 2480x3508) | 20.8 MB | 466 KB | 98% |
+| Screenshots (PNG) | 33-66 KB | ~1 KB | 99% |
+
+Real photographs carry sensor noise that compresses less well than a generated
+gradient, so expect 65-85% on camera images rather than the top of that range.
+Screenshots are the reverse: flat colour, and the savings are real.
+
+**Where it happens.** Twice, on purpose:
+
+- **In the browser** (`browser-image-compression`, in the portal's
+  `lib/compress-image.ts`) — so a student on mobile data uploads 300 KB instead
+  of 8 MB. This is about upload time, and it is best-effort: any failure falls
+  back to sending the original.
+- **On the server** (`sharp`/libvips, in `src/storage/compress.ts`) — the one
+  that counts. It cannot be skipped by a client posting straight at the API.
+
+**The rules**, which is what makes it safe to apply to everything:
+
+1. Only images are touched. PDFs, video and documents are stored byte-for-byte
+   — a PDF only shrinks meaningfully by re-encoding the images inside it, which
+   risks corrupting work a student cannot re-create.
+2. If the re-encode is not smaller, the **original** is kept.
+3. Any failure — an undecodable HEIC, a corrupt file — stores the original. A
+   compression fault must never cost someone their submission.
+4. Screenshots and diagrams are encoded **losslessly** (pixel-identical);
+   photographs use quality 82. The split is by source format and pixel count,
+   because lossy encoding turns small text to mush.
+5. A WebP that already fits within the size cap is left exactly as it is, so
+   re-uploading a file that came from the portal does not degrade it.
+6. EXIF is stripped — smaller, and a phone photo no longer carries the GPS
+   coordinates of a student's home into shared storage. Orientation is baked
+   into the pixels first, so nothing ends up sideways.
+
+**The stored extension follows the stored bytes.** A re-encoded upload is keyed
+`.webp` and served `image/webp`; the download filename is corrected to match, so
+a row still naming `photo.jpg` does not save WebP bytes under a `.jpg` name.
+`file_size` and `mimeType` in the upload response describe what was stored, not
+what was sent.
+
+Tuning is in `.env.example` under *Image compression*:
+`IMAGE_MAX_DIMENSION`, `IMAGE_QUALITY`, `IMAGE_COMPRESS_CONCURRENCY`.
+
+Memory is the constraint worth knowing about: each concurrent re-encode holds a
+decoded bitmap (~48 MB for a 12 MP image), so `IMAGE_COMPRESS_CONCURRENCY`
+bounds what a deadline-day rush can allocate. Requests queue rather than the
+container dying.
+
 ## What is allowed in
 
 - **Refused at upload**: `.html`, `.svg`, `.js`, `.php`, `.exe`, and similar —
