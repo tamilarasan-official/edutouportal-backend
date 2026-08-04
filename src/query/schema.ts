@@ -234,11 +234,15 @@ export const TABLES: Record<TableName, TableDef> = {
 
   task_assignments: {
     columns: [
-      'id', 'task_id', 'student_id', 'status', 'assigned_at', 'started_at',
-      'completed_at', 'updated_at',
+      'id', 'task_id', 'student_id', 'assigned_by', 'status', 'assigned_at',
+      'started_at', 'completed_at', 'updated_at',
     ],
-    insertable: ['task_id', 'student_id', 'status'],
+    // assigned_by is listed so the managetask pages that send it do not 400,
+    // but the insert policy overwrites it with the caller's own id.
+    insertable: ['task_id', 'student_id', 'assigned_by', 'status'],
     // started_at / completed_at are stamped by the student's own submit flow.
+    // assigned_by is deliberately absent: who assigned the task is fixed at
+    // creation, and update is reachable by the student who owns the row.
     updatable: ['status', 'started_at', 'completed_at'],
     relationships: [
       { alias: 'task', table: 'tasks', localColumn: 'task_id', foreignColumn: 'id', cardinality: 'one' },

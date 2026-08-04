@@ -150,12 +150,40 @@ describe('mentor portal', () => {
     assert.equal(steps.status, 200)
     assert.equal(steps.body.data.length, 2)
 
+    // managetask sends assigned_by with every assignment it creates; here it
+    // names someone else, which the insert policy must overwrite rather than
+    // reject.
     const assigned = await mentor.client.db({
       table: 'task_assignments',
       op: 'insert',
-      values: { task_id: taskId, student_id: student.id },
+      values: { task_id: taskId, student_id: student.id, assigned_by: student.id },
     })
     assert.equal(assigned.status, 200)
+    assert.equal(assigned.body.data[0].assigned_by, mentor.id, 'assigned_by is server-set')
+  })
+
+  it('does not let a student rewrite who assigned their task', async () => {
+    const mentor = await createUser(base, 'mentor')
+    const student = await createUser(base, 'student')
+
+    const task = await mentor.client.db({
+      table: 'tasks',
+      op: 'insert',
+      values: { title: 'Build a page', description: 'React basics' },
+    })
+    const assigned = await mentor.client.db({
+      table: 'task_assignments',
+      op: 'insert',
+      values: { task_id: task.body.data[0].id, student_id: student.id },
+    })
+
+    const res = await student.client.db({
+      table: 'task_assignments',
+      op: 'update',
+      values: { assigned_by: student.id },
+      filters: [{ column: 'id', op: 'eq', value: assigned.body.data[0].id }],
+    })
+    assert.equal(res.status, 400)
   })
 
   it('a student cannot create a task', async () => {

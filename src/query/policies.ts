@@ -189,7 +189,10 @@ const POLICIES: Record<TableName, Partial<Record<Operation, PolicyFn>>> = {
         : a.role === 'mentor'
         ? { allow: true, filter: ownStudents('student_id', a) }
         : { allow: true, filter: own('student_id', a) },
-    insert: (a) => (isStaff(a) ? ALLOW : deny('Mentors only')),
+    // assigned_by is server-set: the client sends its own id, but trusting it
+    // would let one mentor record an assignment under another's name.
+    insert: (a) =>
+      isStaff(a) ? { allow: true, force: { assigned_by: a.userId } } : deny('Mentors only'),
     // A student may move their own assignment forward (e.g. to 'submitted');
     // mentors may update anyone they own.
     update: (a) =>
