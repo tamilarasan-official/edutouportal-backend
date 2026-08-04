@@ -12,7 +12,52 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
 
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  /**
+   * Validated as a real URL, not just a non-empty string.
+   *
+   * Passwords routinely contain characters that are structural in a URL --
+   * `@` separates the credentials from the host, `#` starts a fragment, `/`
+   * starts the path. An unencoded one either fails to parse or, worse, parses
+   * into the wrong host and produces a confusing connection error much later.
+   * Percent-encode them: @ -> %40, # -> %23, / -> %2F, : -> %3A, ? -> %3F.
+   */
+  DATABASE_URL: z
+    .string()
+    .min(1, 'DATABASE_URL is required')
+    .superRefine((value, ctx) => {
+      let parsed: URL
+      try {
+        parsed = new URL(value)
+      } catch {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'DATABASE_URL is not a valid URL. If the password contains @ # / : or ?, ' +
+            'percent-encode it (@ -> %40, # -> %23, / -> %2F). Example: ' +
+            'postgresql://user:p%40ssw%23rd@db-host:5432/edutou',
+        })
+        return
+      }
+
+      if (!/^postgres(ql)?:$/.test(parsed.protocol)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `DATABASE_URL must start with postgres:// or postgresql:// (got "${parsed.protocol}//")`,
+        })
+      }
+      if (!parsed.hostname) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'DATABASE_URL has no host. Use the internal service hostname, not a public address.',
+        })
+      }
+      if (!parsed.pathname || parsed.pathname === '/') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'DATABASE_URL has no database name (the part after the port, e.g. /edutou).',
+        })
+      }
+    }),
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
 
   // Must be at least 32 bytes of entropy. Generate with:
