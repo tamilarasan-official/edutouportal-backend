@@ -99,11 +99,47 @@ export function createApp() {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    const code = (err as { code?: string }).code
+
     // multer surfaces size violations as a coded error rather than an HTTP status.
-    if ((err as { code?: string }).code === 'LIMIT_FILE_SIZE') {
+    if (code === 'LIMIT_FILE_SIZE') {
       res.status(413).json({ error: { message: 'File is too large', code: 'TOO_LARGE' } })
       return
     }
+
+    // multer rejects a file arriving under an unexpected field name.
+    if (code === 'LIMIT_UNEXPECTED_FILE') {
+      res.status(400).json({
+        error: { message: 'Unexpected file field; upload the file as "file"', code: 'BAD_UPLOAD' },
+      })
+      return
+    }
+
+    // A malformed request body is the caller's mistake, not a server fault.
+    // express.json() throws a SyntaxError when the body does not parse -- which
+    // is what happened when uploads were sent as multipart but labelled
+    // application/json. That produced a 500 and told the client nothing.
+    if (
+      err instanceof SyntaxError ||
+      code === 'entity.parse.failed' ||
+      code === 'encoding.unsupported'
+    ) {
+      res.status(400).json({
+        error: {
+          message:
+            'Request body could not be parsed. For file uploads send multipart/form-data ' +
+            'and do not set a content-type header.',
+          code: 'MALFORMED_BODY',
+        },
+      })
+      return
+    }
+
+    if (code === 'entity.too.large') {
+      res.status(413).json({ error: { message: 'Request body is too large', code: 'TOO_LARGE' } })
+      return
+    }
+
     if (err.message?.startsWith('Origin ')) {
       res.status(403).json({ error: { message: 'Origin not allowed', code: 'CORS' } })
       return
