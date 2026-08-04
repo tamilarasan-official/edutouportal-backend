@@ -68,9 +68,34 @@ const EnvSchema = z.object({
 
   // Comma-separated list of allowed browser origins.
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
-  // Set when the API and frontend are on different subdomains behind Dokploy,
-  // e.g. ".edutou.example.com", so the session cookie is shared.
-  COOKIE_DOMAIN: z.string().optional(),
+  /**
+   * Set when the API and frontend are on different subdomains behind Dokploy,
+   * e.g. ".edutou.example.com", so the session cookie is shared.
+   *
+   * "To disable it" is spelled *empty*, and the words people reach for instead
+   * are treated as empty here. `COOKIE_DOMAIN=none` is otherwise a perfectly
+   * valid non-empty string, so it reaches the browser as `Domain=none`, which
+   * matches no host and makes the browser silently discard the whole cookie --
+   * every request then arrives unauthenticated with nothing in the logs.
+   */
+  COOKIE_DOMAIN: z
+    .string()
+    .optional()
+    .transform((value) => {
+      const trimmed = value?.trim() ?? ''
+      if (!trimmed || ['none', 'null', 'undefined', '-'].includes(trimmed.toLowerCase())) {
+        return undefined
+      }
+      return trimmed
+    }),
+  /**
+   * "lax" while every frontend shares the API's registrable domain.
+   *
+   * Set to "none" only for a frontend on a *different* registrable domain
+   * (portal.qbitio.com calling api.edutou.in): Lax withholds the cookie there,
+   * so every request is anonymous. See middleware/auth.ts for the cost.
+   */
+  COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
 
   // Absolute path to the uploads volume. Replaces Supabase Storage.
   STORAGE_DIR: z.string().default('/var/lib/edutou/uploads'),

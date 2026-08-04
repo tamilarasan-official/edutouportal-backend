@@ -16,13 +16,31 @@ declare global {
 export const ACCESS_COOKIE = 'edutou_access'
 export const REFRESH_COOKIE = 'edutou_refresh'
 
+/**
+ * Session cookie attributes. Every cookie this API sets goes through here, so
+ * it is the single place the policy is decided.
+ *
+ * `sameSite` defaults to "lax" -- rather than "strict", because the Google
+ * OAuth callback is a top-level cross-site navigation back to us and "strict"
+ * would drop the cookie. Lax is sufficient while every frontend shares the
+ * API's registrable domain (portal.edutou.in -> api.edutou.in).
+ *
+ * A frontend on a *different* registrable domain (portal.qbitio.com against
+ * api.edutou.in) is cross-site, so Lax withholds the cookie and every call
+ * arrives anonymous. COOKIE_SAMESITE=none lifts that by making the session a
+ * third-party cookie, which browsers only accept when it is also Secure --
+ * hence the override below. Know the cost before setting it: Safari and every
+ * browser on iOS block third-party cookies outright, and Chrome blocks them in
+ * Incognito, so those users still cannot sign in. Giving the API a hostname on
+ * each frontend's own domain keeps the cookie first-party and has no caveat.
+ */
 export function cookieOptions(maxAgeSeconds: number) {
+  const sameSite = config.COOKIE_SAMESITE
   return {
     httpOnly: true,
-    // Lax rather than Strict: the Google OAuth callback is a top-level
-    // cross-site navigation back to us, and Strict would drop the cookie.
-    sameSite: 'lax' as const,
-    secure: config.isProduction,
+    sameSite,
+    // SameSite=None is rejected by browsers unless the cookie is also Secure.
+    secure: config.isProduction || sameSite === 'none',
     path: '/',
     maxAge: maxAgeSeconds * 1000,
     ...(config.COOKIE_DOMAIN ? { domain: config.COOKIE_DOMAIN } : {}),
