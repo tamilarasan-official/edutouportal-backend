@@ -1,0 +1,19 @@
+# Normalise line endings so Windows and Linux checkouts produce identical files.
+# Without this, git warns on every commit and Docker builds can differ from
+# local runs (a CRLF shebang or .sh file breaks inside an Alpine container).
+* text=auto eol=lf
+
+# Shell scripts must be LF or they will not execute in a container.
+*.sh text eol=lf
+
+# SQL migrations are checksummed by the migration runner -- a line-ending
+# change would look like an edited migration and fail the boot.
+*.sql text eol=lf
+
+# Binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text eol=lf

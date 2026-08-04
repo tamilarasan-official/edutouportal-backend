@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment -- never commit real secrets
+.env
+.env.local
+.env.*.local
+# .env.test carries only throwaway local values and IS committed, so CI and a
+# new contributor can run the suite without extra setup.
+!.env.test
+!.env.example
+
+# Uploads written during local runs / tests
+.test-uploads/
+uploads/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# NOTE: migrations/*.sql is the schema source of truth and MUST be committed.
+# There is deliberately no *.sql ignore rule in this file.
