@@ -15,17 +15,47 @@ import { hashPassword } from '../auth/tokens.js'
  * so the password does not end up in the container's env or in `docker inspect`.
  */
 
-async function main(): Promise<void> {
+/**
+ * Prompt only for the values that were not supplied on the command line.
+ *
+ * The readline interface is created lazily. Opening it unconditionally kept
+ * stdin referenced in environments without a TTY -- such as a container web
+ * terminal -- where the script could appear to do nothing at all.
+ */
+async function collectArgs(): Promise<[string, string, string]> {
+  const [, , argEmail, argPassword, argName] = process.argv
+
+  if (argEmail && argPassword) {
+    return [argEmail, argPassword, argName ?? argEmail.split('@')[0] ?? 'Admin']
+  }
+
+  if (!stdin.isTTY) {
+    throw new Error(
+      'No interactive terminal available. Pass the values as arguments:\n' +
+        '  node dist/scripts/create-admin.js <email> <password> "<full name>"'
+    )
+  }
+
   const rl = createInterface({ input: stdin, output: stdout })
+  try {
+    const email = argEmail ?? (await rl.question('Admin email: '))
+    const password = argPassword ?? (await rl.question('Admin password (min 8 chars): '))
+    const fullName = argName ?? (await rl.question('Full name: '))
+    return [email, password, fullName]
+  } finally {
+    rl.close()
+  }
+}
 
-  const email = process.argv[2] ?? (await rl.question('Admin email: '))
-  const password = process.argv[3] ?? (await rl.question('Admin password (min 8 chars): '))
-  const fullName = process.argv[4] ?? (await rl.question('Full name: '))
+async function main(): Promise<void> {
+  console.log('[create-admin] starting...')
 
-  rl.close()
+  const [email, password, fullName] = await collectArgs()
 
   if (!email.includes('@')) throw new Error('That does not look like an email address')
   if (password.length < 8) throw new Error('Password must be at least 8 characters')
+
+  console.log(`[create-admin] target account: ${email}`)
 
   const existing = await queryOne<{ id: string }>(
     'SELECT id FROM users WHERE lower(email) = lower($1)',

@@ -78,6 +78,22 @@ const EnvSchema = z.object({
   PUBLIC_URL: z.string().default('http://localhost:4000'),
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(25 * 1024 * 1024),
 
+  /**
+   * Optional first-admin bootstrap.
+   *
+   * When both are set, the server creates this admin at boot if no admin
+   * account exists yet. Signup always yields a student and only an admin can
+   * change roles, so without this the very first admin has to be made from a
+   * shell -- which is awkward or impossible on hosts whose web terminal is
+   * unreliable.
+   *
+   * It is a no-op once any admin exists, so it is safe to leave set. Remove it
+   * (and change the password) once you are in.
+   */
+  BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
+  BOOTSTRAP_ADMIN_PASSWORD: z.string().min(8).optional(),
+  BOOTSTRAP_ADMIN_NAME: z.string().max(200).optional(),
+
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   // Where the browser lands after OAuth completes.

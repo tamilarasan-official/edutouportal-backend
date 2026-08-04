@@ -6,6 +6,7 @@ import { createApp } from './app.js'
 import { ensureStorageDirs } from './storage/routes.js'
 import { attachRealtime } from './realtime/hub.js'
 import { purgeExpiredTokens } from './auth/tokens.js'
+import { bootstrapAdmin } from './auth/bootstrap.js'
 
 const server = createServer(createApp())
 
@@ -16,6 +17,12 @@ async function start(): Promise<void> {
   // applying twice.
   await runMigrations()
   await ensureStorageDirs()
+
+  // After migrations, so the tables exist. Failing here must not stop the
+  // server from serving -- a bad bootstrap value should not take the API down.
+  await bootstrapAdmin().catch((err) =>
+    console.error('[bootstrap] failed to create the initial admin:', err)
+  )
 
   attachRealtime(server)
 
