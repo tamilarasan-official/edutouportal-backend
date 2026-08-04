@@ -136,6 +136,41 @@ export class Client {
     return this.request<T>('PATCH', path, body)
   }
 
+  /**
+   * Multipart upload. `request` sends JSON, which the storage endpoint cannot
+   * accept -- and the content-type header must be left to fetch so it can add
+   * the multipart boundary.
+   */
+  async upload<T = any>(
+    path: string,
+    file: Blob,
+    filename: string,
+    fields: Record<string, string> = {}
+  ): Promise<ApiResponse<T>> {
+    const form = new FormData()
+    form.append('file', file, filename)
+    for (const [key, value] of Object.entries(fields)) form.append(key, value)
+
+    const cookie = this.cookieHeader()
+    const response = await fetch(`${this.base}${path}`, {
+      method: 'POST',
+      headers: cookie ? { cookie } : {},
+      body: form,
+    })
+
+    this.absorb(response)
+
+    const text = await response.text()
+    let parsed: unknown = null
+    try {
+      parsed = text ? JSON.parse(text) : null
+    } catch {
+      parsed = text
+    }
+
+    return { status: response.status, body: parsed as T }
+  }
+
   /** Convenience for the generic data endpoint. */
   db<T = any>(payload: Record<string, unknown>) {
     return this.post<{ data: T; count: number | null; error?: { message: string; code: string } }>(
