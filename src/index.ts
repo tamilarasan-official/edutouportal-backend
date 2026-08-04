@@ -3,7 +3,7 @@ import { config } from './config.js'
 import { closePool } from './db/pool.js'
 import { runMigrations } from './db/migrate.js'
 import { createApp } from './app.js'
-import { ensureStorageDirs } from './storage/routes.js'
+import { ensureStorageReady } from './storage/routes.js'
 import { attachRealtime } from './realtime/hub.js'
 import { purgeExpiredTokens } from './auth/tokens.js'
 import { bootstrapAdmin } from './auth/bootstrap.js'
@@ -16,7 +16,7 @@ async function start(): Promise<void> {
   // schema_migrations, so a concurrent duplicate fails cleanly rather than
   // applying twice.
   await runMigrations()
-  await ensureStorageDirs()
+  await ensureStorageReady()
 
   // After migrations, so the tables exist. Failing here must not stop the
   // server from serving -- a bad bootstrap value should not take the API down.

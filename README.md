@@ -1,7 +1,7 @@
 # Edutou API
 
 Express + TypeScript API backing the Edutou portal. PostgreSQL for data,
-WebSockets for live quiz events, disk-backed file storage.
+WebSockets for live quiz events, object-storage-backed uploads.
 
 Deployed as its own container, separate from the frontend and the database.
 
@@ -86,7 +86,7 @@ Coverage:
 ```
 src/
 ├── app.ts            Express app (no listen -- tests mount this directly)
-├── index.ts          boot: migrate, storage dirs, WebSocket, listen
+├── index.ts          boot: migrate, storage check, WebSocket, listen
 ├── config.ts         env validation; refuses to start on a bad config
 ├── db/               pool + migration runner
 ├── auth/             JWT sessions, Argon2id, Google OAuth
@@ -96,7 +96,7 @@ src/
 │   └── builder.ts      parameterised SQL construction
 ├── quiz/             live session control
 ├── rpc/              stored-procedure endpoints + admin role changes
-├── storage/          uploads
+├── storage/          uploads: disk or S3 driver, signed URLs -- see STORAGE.md
 └── realtime/         WebSocket hub
 migrations/           schema, forward-only, committed
 ```
@@ -134,6 +134,7 @@ migration is a hard error — add a new numbered file instead.
 | `PATCH /api/admin/role` | Role changes (admin only) |
 | `/api/quiz/*` | Live session control, joining, answers, leaderboard |
 | `/api/storage/:bucket` | Uploads / downloads |
+| `GET /api/storage/sign` | Short-lived URL a browser can fetch on its own |
 | `GET /health`, `/health/ready` | Liveness / readiness |
 | `WS /realtime` | Live events |
 
@@ -141,14 +142,19 @@ migration is a hard error — add a new numbered file instead.
 
 ## Deployment
 
-Three separate Dokploy services: this API, the frontend, and a Postgres
-database. See `DEPLOYMENT.md` in the frontend repository for the full topology,
-domains, and backup procedure.
+Three separate Dokploy services -- this API, the frontend, and a Postgres
+database -- plus object storage for uploads. See `DEPLOYMENT.md` in the frontend
+repository for the full topology, domains, and backup procedure, and `STORAGE.md`
+here for the upload path.
 
 Two things to get right:
 
-- **`STORAGE_DIR` must be a mounted volume.** Without it every uploaded file is
-  lost on redeploy.
+- **Put uploads in object storage.** Set `S3_ENDPOINT` / `S3_BUCKET` /
+  `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` and they outlive the container by
+  construction. The alternative, `STORAGE_DRIVER=disk`, is only durable if
+  `STORAGE_DIR` is a mounted volume — without one, every file uploaded before
+  the last deploy is gone while the database still lists it. `STORAGE.md` covers
+  the Garage setup, the migration off the volume, and `npm run storage:doctor`.
 - **One replica only.** The WebSocket hub keeps subscriber state in process
   memory, so an event published by one replica never reaches clients connected
   to another. Scaling out needs a Redis pub/sub adapter in `src/realtime/hub.ts`.

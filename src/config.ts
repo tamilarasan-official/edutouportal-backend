@@ -97,8 +97,41 @@ const EnvSchema = z.object({
    */
   COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
 
-  // Absolute path to the uploads volume. Replaces Supabase Storage.
+  /**
+   * Where uploaded bytes live.
+   *
+   * "disk" writes to STORAGE_DIR inside the container. That is only durable if
+   * the path is a mounted volume -- on a host that rebuilds the container per
+   * deploy, an unmounted directory means every file uploaded before the last
+   * deploy is gone, and downloads answer 404 while the database still lists
+   * them.
+   *
+   * "s3" writes to any S3-compatible object store (Garage, MinIO, R2, AWS).
+   * Storage then outlives the container by construction. Left unset, the driver
+   * is inferred: s3 when S3_ENDPOINT is present, disk otherwise.
+   */
+  STORAGE_DRIVER: z.enum(['disk', 's3']).optional(),
+  // Absolute path to the uploads volume, for STORAGE_DRIVER=disk.
   STORAGE_DIR: z.string().default('/var/lib/edutou/uploads'),
+
+  // --- S3 / Garage. Required when the driver resolves to s3. -----------------
+  // e.g. http://garage:3900 on Dokploy's internal network.
+  S3_ENDPOINT: z.string().url().optional(),
+  // Garage's region is whatever its config calls it -- typically "garage".
+  S3_REGION: z.string().default('garage'),
+  S3_BUCKET: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  /**
+   * Path-style addressing (`endpoint/bucket/key`) rather than virtual-host
+   * style (`bucket.endpoint/key`). Garage and MinIO need this unless a wildcard
+   * DNS record points at them, so it defaults on.
+   */
+  S3_FORCE_PATH_STYLE: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+
   // Public base URL files are served from, e.g. https://api.edutou.example.com
   PUBLIC_URL: z.string().default('http://localhost:4000'),
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(25 * 1024 * 1024),
@@ -138,6 +171,38 @@ if (!parsed.success) {
 
 const env = parsed.data
 
+/**
+ * Naming an endpoint is taken as choosing object storage, so a deployment
+ * cannot half-configure S3 and silently keep writing to a container-local
+ * directory that the next deploy erases.
+ */
+const storageDriver = env.STORAGE_DRIVER ?? (env.S3_ENDPOINT ? 's3' : 'disk')
+
+if (storageDriver === 's3') {
+  const missing = (
+    [
+      ['S3_ENDPOINT', env.S3_ENDPOINT],
+      ['S3_BUCKET', env.S3_BUCKET],
+      ['S3_ACCESS_KEY_ID', env.S3_ACCESS_KEY_ID],
+      ['S3_SECRET_ACCESS_KEY', env.S3_SECRET_ACCESS_KEY],
+    ] as const
+  )
+    .filter(([, value]) => !value)
+    .map(([name]) => name)
+
+  if (missing.length > 0) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `Invalid environment configuration:\n` +
+        `  - STORAGE_DRIVER is "s3" but ${missing.join(', ')} ${
+          missing.length === 1 ? 'is' : 'are'
+        } not set.\n` +
+        `    Set them, or set STORAGE_DRIVER=disk to store uploads on a mounted volume.`
+    )
+    process.exit(1)
+  }
+}
+
 export const config = {
   ...env,
   isProduction: env.NODE_ENV === 'production',
@@ -145,6 +210,7 @@ export const config = {
     .map((o) => o.trim())
     .filter(Boolean),
   googleEnabled: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+  storageDriver,
 } as const
 
 export type Config = typeof config

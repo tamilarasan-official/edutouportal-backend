@@ -1,12 +1,13 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer'
 import { randomUUID } from 'node:crypto'
-import { createReadStream } from 'node:fs'
-import { mkdir, stat, unlink, writeFile } from 'node:fs/promises'
-import { extname, join, normalize, sep } from 'node:path'
+import { extname } from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import { config } from '../config.js'
 import { requireAuth } from '../middleware/auth.js'
 import type { Actor } from '../query/policies.js'
+import { assertSafeKey, type ByteRange } from './driver.js'
+import { storage } from './index.js'
 import {
   DEFAULT_DOWNLOAD_TTL_SECONDS,
   signedDownloadUrl,
@@ -18,9 +19,11 @@ export const storageRouter = Router()
 /**
  * File storage. Replaces Supabase Storage.
  *
- * Files live on a mounted volume rather than in the database, so the Postgres
- * dump stays small and the volume can be backed up separately. The two buckets
- * match the ones the frontend used: `task-submissions` and `resources`.
+ * Bytes live outside the database -- on a mounted volume or, in production, in
+ * object storage -- so the Postgres dump stays small and uploads can be backed
+ * up separately. Which of the two is in use is a deployment decision; see
+ * storage/driver.ts. The two logical buckets match the ones the frontend used:
+ * `task-submissions` and `resources`.
  */
 
 const BUCKETS = {
@@ -80,21 +83,38 @@ const upload = multer({
 })
 
 /**
- * Build a storage path that cannot escape the bucket directory.
+ * Parse a single-range `Range` header.
  *
- * The client never supplies the filename that lands on disk -- we generate a
- * UUID and keep only the (validated) extension. That removes path traversal,
- * collisions, and any question of what a "safe" filename is.
+ * Only the simple `bytes=start-end` forms are honoured; anything else -- a
+ * multi-range request, a malformed header -- is treated as no range at all,
+ * which is a legal response. Video seeking is what needs this: without it a
+ * browser re-downloads the whole file on every scrub.
  */
-function resolveStoragePath(bucket: BucketName, relative: string): string {
-  const base = join(config.STORAGE_DIR, bucket)
-  const target = normalize(join(base, relative))
+function parseRange(header: unknown, size: number): ByteRange | undefined {
+  if (typeof header !== 'string' || size === 0) return undefined
 
-  // normalize() collapses `..`; verify we are still inside the bucket.
-  if (!target.startsWith(base + sep) && target !== base) {
-    throw new Error('Path escapes bucket')
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim())
+  if (!match) return undefined
+
+  const [, rawStart, rawEnd] = match
+  let start: number
+  let end: number
+
+  if (rawStart === '') {
+    // `bytes=-500` means the LAST 500 bytes, not the first 500.
+    const suffix = Number(rawEnd)
+    if (!Number.isFinite(suffix) || suffix <= 0) return undefined
+    start = Math.max(0, size - suffix)
+    end = size - 1
+  } else {
+    start = Number(rawStart)
+    end = rawEnd === '' ? size - 1 : Number(rawEnd)
   }
-  return target
+
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return undefined
+  if (start > end || start >= size) return undefined
+
+  return { start, end: Math.min(end, size - 1) }
 }
 
 /**
@@ -215,13 +235,9 @@ storageRouter.post(
       segment(req.body?.stepId),
     ]
     const filename = `${Date.now()}-${randomUUID()}${extension}`
-    const relative = join(...parts, filename)
-    const absolute = resolveStoragePath(bucketName, relative)
+    const key = [...parts, filename].join('/')
 
-    await mkdir(join(absolute, '..'), { recursive: true })
-    await writeFile(absolute, file.buffer)
-
-    const key = parts.join('/') + '/' + filename
+    await storage().put(bucketName, key, file.buffer, file.mimetype || 'application/octet-stream')
     const url = `${config.PUBLIC_URL}/api/storage/${bucketName}/${key}`
     // The caller usually wants to show the file straight away, and the raw URL
     // is not fetchable from the browser on its own -- see signing.ts.
@@ -253,7 +269,7 @@ storageRouter.post(
  * cookie-carrying channel, then gives the returned URL to an <iframe>, <img> or
  * download anchor -- contexts that cannot authenticate themselves.
  */
-storageRouter.get('/sign', requireAuth, (req: Request, res: Response) => {
+storageRouter.get('/sign', requireAuth, async (req: Request, res: Response) => {
   const bucketName = String(req.query.bucket ?? '')
   if (!isBucket(bucketName)) {
     res.status(404).json({ error: { message: 'Unknown bucket', code: 'UNKNOWN_BUCKET' } })
@@ -275,7 +291,7 @@ storageRouter.get('/sign', requireAuth, (req: Request, res: Response) => {
 
   // Reject traversal here rather than handing back a URL that 400s later.
   try {
-    resolveStoragePath(bucketName, key)
+    assertSafeKey(key)
   } catch {
     res.status(400).json({ error: { message: 'Invalid path', code: 'INVALID_PATH' } })
     return
@@ -284,6 +300,40 @@ storageRouter.get('/sign', requireAuth, (req: Request, res: Response) => {
   const actor = req.actor!
   if (!mayRead(bucketName, key, actor)) {
     res.status(403).json({ error: { message: 'Not your file', code: 'FORBIDDEN' } })
+    return
+  }
+
+  /**
+   * Refuse to sign a key that holds nothing.
+   *
+   * Signing is pure arithmetic, so without this check a URL is handed back for
+   * any key at all and the problem only appears later, as a 404 inside an
+   * iframe with no indication of which layer was wrong. It is exactly how a
+   * caller that stored a made-up key -- rather than the one the upload response
+   * returned -- stayed invisible: the row listed fine and only the preview
+   * failed.
+   */
+  let exists
+  try {
+    exists = await storage().head(bucketName, key)
+  } catch (err) {
+    console.error('[storage] head failed while signing', { bucket: bucketName, key, err })
+    res.status(503).json({ error: { message: 'Storage is unavailable', code: 'STORAGE_DOWN' } })
+    return
+  }
+
+  if (!exists) {
+    console.warn('[storage] refusing to sign a missing object', {
+      bucket: bucketName,
+      key,
+      driver: storage().description,
+    })
+    res.status(404).json({
+      error: {
+        message: 'That file is not in storage. The record may point at a key that was never written.',
+        code: 'NOT_FOUND',
+      },
+    })
     return
   }
 
@@ -340,43 +390,93 @@ storageRouter.get('/:bucket/*', async (req: Request, res: Response) => {
     return
   }
 
-  let absolute: string
   try {
-    absolute = resolveStoragePath(bucketName, key)
+    assertSafeKey(key)
   } catch {
     res.status(400).json({ error: { message: 'Invalid path', code: 'INVALID_PATH' } })
     return
   }
 
+  const driver = storage()
+
+  let info
   try {
-    const info = await stat(absolute)
-    if (!info.isFile()) throw new Error('not a file')
+    info = await driver.head(bucketName, key)
+  } catch (err) {
+    // A store that is unreachable is an outage, not a missing file. Reporting
+    // 404 here is what makes a broken S3 endpoint look like lost data.
+    console.error('[storage] head failed', { bucket: bucketName, key, err })
+    res.status(503).json({ error: { message: 'Storage is unavailable', code: 'STORAGE_DOWN' } })
+    return
+  }
 
-    const inlineType = INLINE_TYPES[extname(key).toLowerCase()]
-    // `?download=1` turns a previewable file into a save-to-disk response, so
-    // one URL serves both the previewer and the download button.
-    const forceDownload = req.query.download === '1' || req.query.download === 'true'
-
-    if (inlineType && !forceDownload) {
-      // Rendered in the resource previewer. Only formats that cannot execute
-      // script in the page's origin are listed -- notably NOT html or svg.
-      // Framing is permitted by the router-level policy above.
-      res.setHeader('Content-Type', inlineType)
-      res.setHeader('Content-Disposition', 'inline')
-    } else {
-      // Anything unrecognised is downloaded, never rendered.
-      res.setHeader('Content-Type', 'application/octet-stream')
-      res.setHeader('Content-Disposition', attachmentDisposition(req.query.filename))
-    }
-
-    // Kept in both branches: stops the browser second-guessing the type we set.
-    res.setHeader('X-Content-Type-Options', 'nosniff')
-    res.setHeader('Content-Length', String(info.size))
-    res.setHeader('Cache-Control', 'private, max-age=3600')
-
-    createReadStream(absolute).pipe(res)
-  } catch {
+  if (!info) {
+    // The row survives but the bytes do not: the usual cause is uploads written
+    // to a container-local directory that a later deploy replaced.
+    console.warn('[storage] object missing', {
+      bucket: bucketName,
+      key,
+      driver: driver.description,
+    })
     res.status(404).json({ error: { message: 'File not found', code: 'NOT_FOUND' } })
+    return
+  }
+
+  const inlineType = INLINE_TYPES[extname(key).toLowerCase()]
+  // `?download=1` turns a previewable file into a save-to-disk response, so
+  // one URL serves both the previewer and the download button.
+  const forceDownload = req.query.download === '1' || req.query.download === 'true'
+
+  if (inlineType && !forceDownload) {
+    // Rendered in the previewer. The type comes from the extension allowlist,
+    // never from what the uploader labelled the file: only formats that cannot
+    // execute script in this origin are listed -- notably NOT html or svg.
+    // Framing is permitted by the router-level policy above.
+    res.setHeader('Content-Type', inlineType)
+    res.setHeader('Content-Disposition', 'inline')
+  } else {
+    // Anything unrecognised is downloaded, never rendered.
+    res.setHeader('Content-Type', 'application/octet-stream')
+    res.setHeader('Content-Disposition', attachmentDisposition(req.query.filename))
+  }
+
+  // Kept in both branches: stops the browser second-guessing the type we set.
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Cache-Control', 'private, max-age=3600')
+  // Seeking in a video or a long PDF depends on this being advertised.
+  res.setHeader('Accept-Ranges', 'bytes')
+
+  const range = parseRange(req.headers.range, info.size)
+
+  let body
+  try {
+    body = await driver.get(bucketName, key, range)
+  } catch (err) {
+    console.error('[storage] read failed', { bucket: bucketName, key, err })
+    res.status(503).json({ error: { message: 'Storage is unavailable', code: 'STORAGE_DOWN' } })
+    return
+  }
+
+  if (!body) {
+    res.status(404).json({ error: { message: 'File not found', code: 'NOT_FOUND' } })
+    return
+  }
+
+  if (range) {
+    res.status(206)
+    res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${info.size}`)
+    res.setHeader('Content-Length', String(range.end - range.start + 1))
+  } else {
+    res.setHeader('Content-Length', String(info.size))
+  }
+
+  try {
+    await pipeline(body.stream, res)
+  } catch (err) {
+    // The usual cause is the client closing the tab mid-download. Headers are
+    // already sent by this point, so there is nothing to report but the log.
+    if (!res.writableEnded) res.destroy()
+    console.warn('[storage] download interrupted', { bucket: bucketName, key, err })
   }
 })
 
@@ -401,17 +501,23 @@ storageRouter.delete('/:bucket/*', requireAuth, async (req: Request, res: Respon
   }
 
   try {
-    await unlink(resolveStoragePath(bucketName, key))
+    await storage().delete(bucketName, key)
     res.json({ data: { success: true } })
-  } catch {
-    // Deleting something that is already gone is not an error worth surfacing.
-    res.json({ data: { success: true } })
+  } catch (err) {
+    // Deleting something already gone is not an error worth surfacing; a store
+    // that refused the call is.
+    console.error('[storage] delete failed', { bucket: bucketName, key, err })
+    res.status(503).json({ error: { message: 'Storage is unavailable', code: 'STORAGE_DOWN' } })
   }
 })
 
-/** Called at boot so a misconfigured volume fails fast rather than on first upload. */
-export async function ensureStorageDirs(): Promise<void> {
-  for (const bucket of Object.keys(BUCKETS)) {
-    await mkdir(join(config.STORAGE_DIR, bucket), { recursive: true })
-  }
+/**
+ * Called at boot so a misconfigured volume or unreachable object store fails
+ * fast, rather than surfacing on a student's first upload -- by which point the
+ * file they submitted is already lost.
+ */
+export async function ensureStorageReady(): Promise<void> {
+  const driver = storage()
+  await driver.ensureReady()
+  console.log(`[storage] using ${driver.description}`)
 }

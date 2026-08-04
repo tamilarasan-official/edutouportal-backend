@@ -179,6 +179,22 @@ describe('storage: signed URL integrity', () => {
     assert.equal(res.body.data.path, upload.body.data.path)
   })
 
+  it('refuses to sign a key that was never written', async () => {
+    // The resources uploader used to record a filename it invented client-side
+    // instead of the key the API returned. Signing succeeded, and the failure
+    // only appeared as a 404 inside an iframe -- with nothing to say which
+    // layer was wrong. It now fails here, where the caller can see it.
+    const mentor = await createUser(base, 'mentor')
+
+    const res = await mentor.client.get(
+      '/api/storage/sign?bucket=resources&path=1764930000000_a1b2c3.jpeg'
+    )
+
+    assert.equal(res.status, 404)
+    assert.equal(res.body.error.code, 'NOT_FOUND')
+    assert.match(String(res.body.error.message), /never written/i)
+  })
+
   it('turns away an anonymous caller asking for a signature', async () => {
     const { path } = await uploadResource()
 

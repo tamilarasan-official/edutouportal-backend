@@ -40,6 +40,16 @@ jobs:
       PUBLIC_URL: http://127.0.0.1:4000
       FRONTEND_URL: http://127.0.0.1:3000
       CORS_ORIGINS: http://127.0.0.1:3000
+      # Production keeps uploads in object storage, so the S3 driver is tested
+      # against a real S3 server rather than a stub. MinIO stands in for Garage
+      # here because it needs no cluster layout to start; the driver speaks the
+      # same protocol to both, and the Garage-specific settings (path style,
+      # relaxed response checksums) are exercised either way.
+      S3_TEST_ENDPOINT: http://127.0.0.1:9000
+      S3_TEST_BUCKET: edutou-ci
+      S3_TEST_ACCESS_KEY_ID: ciminioadmin
+      S3_TEST_SECRET_ACCESS_KEY: ciminioadmin
+      S3_TEST_REGION: us-east-1
 
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +61,22 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Start object storage
+        # Not a `services:` entry because MinIO needs a command argument, which
+        # service containers cannot supply. The test suite creates the bucket.
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=ciminioadmin \
+            -e MINIO_ROOT_PASSWORD=ciminioadmin \
+            minio/minio:latest server /data
+          for i in $(seq 1 30); do
+            if curl -fs http://127.0.0.1:9000/minio/health/live > /dev/null; then
+              echo "object storage ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "object storage did not come up"; docker logs minio; exit 1
 
       - name: Typecheck
         # The backend compiles under `strict` with no ignoreBuildErrors escape

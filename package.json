@@ -10,10 +10,15 @@
     "migrate": "tsx src/db/migrate.ts",
     "migrate:prod": "node dist/db/migrate.js",
     "create-admin": "tsx src/scripts/create-admin.ts",
+    "storage:doctor": "tsx src/scripts/storage-doctor.ts",
+    "storage:migrate": "tsx src/scripts/storage-migrate.ts",
+    "storage:repair": "tsx src/scripts/storage-repair.ts",
+    "sync-mentors": "tsx src/scripts/sync-mentors.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test --test-concurrency=1 tests/*.test.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1102.0",
     "argon2": "^0.41.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
