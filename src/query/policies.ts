@@ -54,6 +54,9 @@ const own = (column: string, actor: Actor): RowFilter => ({
 
 const isStaff = (a: Actor) => a.role === 'admin' || a.role === 'mentor'
 
+/** Grant to admins, deny everyone else. */
+const adminOnly = (a: Actor): PolicyResult => (a.role === 'admin' ? ALLOW : deny('Admins only'))
+
 /**
  * Rows belonging to students this mentor is assigned, plus the mentor's own.
  * Admins bypass this entirely.
@@ -99,16 +102,28 @@ const POLICIES: Record<TableName, Partial<Record<Operation, PolicyFn>>> = {
   },
 
   quiz_sessions: {
-    // Read-only here. Everything that mutates a session goes through /api/quiz.
+    // Read-only here. Everything that DRIVES a session goes through /api/quiz,
+    // so insert/update stay absent: the server owns the clock and the question
+    // pointer, and a hand-written update would desync a running session.
     select: () => ALLOW,
+    // Deleting is not driving. Admins need to clear out abandoned sessions, and
+    // the FKs cascade to participants/answers/events, so the purge is complete.
+    delete: adminOnly,
   },
 
   session_participants: {
     // A participant list is public within a session -- the lobby shows it.
     select: () => ALLOW,
+    // Removing a disruptive participant mid-session is an admin action.
+    delete: adminOnly,
   },
 
   session_answers: {
+    // Read-only for everyone, admins included: an answer row is what the scoring
+    // path derived its points from, so editing or deleting one here would leave
+    // points_history crediting a submission that no longer says what it did.
+    // Clear a whole session instead -- deleting the quiz_sessions row cascades.
+    //
     // Your own answers, or any answer if you host the session. Without the
     // host clause a student could read the whole class's submissions.
     select: (a) =>
@@ -135,11 +150,19 @@ const POLICIES: Record<TableName, Partial<Record<Operation, PolicyFn>>> = {
               params: [a.userId],
             },
           },
+    // The event log is append-only for everyone; admins may clear it down.
+    delete: adminOnly,
   },
 
   quiz_attempts: {
     select: (a) => (isStaff(a) ? ALLOW : { allow: true, filter: own('user_id', a) }),
     insert: (a) => ({ allow: true, force: { user_id: a.userId } }),
+    // Regrading and removing a bad attempt are admin-only. Note this table is
+    // independent of the points ledger -- live-quiz points are awarded through
+    // award_points into points_history -- so correcting a score here cannot put
+    // the leaderboard out of step with the ledger.
+    update: adminOnly,
+    delete: adminOnly,
   },
 
   // ---------------------------------------------------------------------------
@@ -160,7 +183,11 @@ const POLICIES: Record<TableName, Partial<Record<Operation, PolicyFn>>> = {
   },
 
   leaderboard: {
-    // Public by design.
+    // Public by design, and read-only for every role including admin: this table
+    // is derived from points_history by the points_history_apply trigger, which
+    // also mirrors the total into profiles.leaderboard_points. A direct write
+    // would be silently re-derived away and drift from the ledger. To repair a
+    // wrong standing, correct the ledger, or call rebuild_leaderboard().
     select: () => ALLOW,
   },
 
@@ -289,6 +316,10 @@ const POLICIES: Record<TableName, Partial<Record<Operation, PolicyFn>>> = {
     select: () => ALLOW,
     // You add yourself to a team; you cannot add someone else.
     insert: (a) => ({ allow: true, force: { user_id: a.userId } }),
+    // Moving a member between teams is admin-only: the self-service path is
+    // leave-then-join, and letting a leader reassign someone would let them pull
+    // a member out of a rival team.
+    update: adminOnly,
     // Leaving is self-service; a team leader can also remove a member.
     delete: (a) =>
       isStaff(a)
@@ -375,6 +406,10 @@ const POLICIES: Record<TableName, Partial<Record<Operation, PolicyFn>>> = {
           }
         : { allow: true, filter: own('student_id', a) },
     insert: (a) => ({ allow: true, force: { student_id: a.userId } }),
+    // Admins can retract a submission (abuse, duplicate, wrong mentor). There is
+    // deliberately no update: rewriting the text of someone's feedback about
+    // their mentor would misattribute an opinion to them.
+    delete: adminOnly,
   },
 
   feedback_sessions: {

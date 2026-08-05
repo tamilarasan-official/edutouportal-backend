@@ -170,7 +170,10 @@ export const TABLES: Record<TableName, TableDef> = {
       'correct_answers', 'created_at',
     ],
     insertable: ['quiz_id', 'user_id', 'answers', 'score', 'total_questions', 'correct_answers'],
-    updatable: [],
+    // Regrade columns only, and the policy limits update to admins. quiz_id and
+    // user_id stay fixed: repointing an attempt at another quiz or another
+    // student would rewrite history rather than correct it.
+    updatable: ['answers', 'score', 'correct_answers'],
     jsonColumns: ['answers'],
     relationships: [
       { alias: 'quiz', table: 'quizzes', localColumn: 'quiz_id', foreignColumn: 'id', cardinality: 'one' },
@@ -318,7 +321,9 @@ export const TABLES: Record<TableName, TableDef> = {
   hackathon_team_members: {
     columns: ['id', 'team_id', 'user_id', 'joined_at'],
     insertable: ['team_id', 'user_id'],
-    updatable: [],
+    // Admin-only reassignment (see policies). user_id is absent: changing it
+    // would swap which person a membership row refers to.
+    updatable: ['team_id'],
     relationships: [
       { alias: 'profiles', table: 'profiles', localColumn: 'user_id', foreignColumn: 'id', cardinality: 'one' },
     ],
