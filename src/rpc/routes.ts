@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { queryOne, query } from '../db/pool.js'
+import { queryOne, query, transaction } from '../db/pool.js'
 import { requireAuth } from '../middleware/auth.js'
-import { revokeAllUserTokens } from '../auth/tokens.js'
+import { hashPassword, revokeAllUserTokens } from '../auth/tokens.js'
 import type { Actor } from '../query/policies.js'
 
 export const rpcRouter = Router()
@@ -228,4 +228,234 @@ adminRouter.patch('/role', requireAuth, async (req: Request, res: Response) => {
   await revokeAllUserTokens(user_id)
 
   res.json({ data: { user_id, role } })
+})
+
+/**
+ * Account management for the admin student/mentor lists.
+ *
+ * These three exist because an account cannot be reached through /api/db at
+ * all: `users` is deliberately absent from the table registry (it holds
+ * password hashes), and the profiles policy denies delete outright with
+ * "Profiles are deleted by removing the user account" -- which, until now,
+ * nothing was able to do. Creating and deleting a person was a manual SQL job.
+ *
+ * A profile is not an account. `users` carries the credentials and `profiles`
+ * the display record, linked 1:1 by id and created by the on_user_created
+ * trigger, so both have to move together -- hence a dedicated endpoint rather
+ * than another entry in the generic query layer.
+ */
+
+const adminOnly = (req: Request, res: Response): boolean => {
+  if (req.actor!.role !== 'admin') {
+    res.status(403).json({ error: { message: 'Admins only', code: 'FORBIDDEN' } })
+    return false
+  }
+  return true
+}
+
+/**
+ * POST /api/admin/users
+ *
+ * Create an account on someone's behalf. Signup always yields a student and
+ * requires the person to choose their own password, which is no use for a
+ * cohort an admin is enrolling.
+ */
+adminRouter.post('/users', requireAuth, async (req: Request, res: Response) => {
+  if (!adminOnly(req, res)) return
+
+  const schema = z.object({
+    email: z.string().email(),
+    // Matches the signup endpoint. argon2 has no bcrypt-style 72-byte cliff, so
+    // only a floor is enforced.
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    full_name: z.string().min(1).max(200),
+    role: z.enum(['admin', 'mentor', 'student', 'coursemaster']).default('student'),
+  })
+
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({
+      error: {
+        message: parsed.error.issues[0]?.message ?? 'Invalid account details',
+        code: 'INVALID',
+      },
+    })
+    return
+  }
+
+  const { email, password, full_name, role } = parsed.data
+
+  const existing = await queryOne<{ id: string }>(
+    'SELECT id FROM users WHERE lower(email) = lower($1)',
+    [email]
+  )
+  if (existing) {
+    res.status(409).json({
+      error: { message: 'That email address is already registered', code: 'EMAIL_TAKEN' },
+    })
+    return
+  }
+
+  const passwordHash = await hashPassword(password)
+
+  const created = await transaction(async (client) => {
+    const { rows } = await client.query<{ id: string }>(
+      `INSERT INTO users (email, password_hash, user_metadata, email_confirmed_at)
+       VALUES ($1, $2, $3, now())
+       RETURNING id`,
+      [email, passwordHash, JSON.stringify({ full_name })]
+    )
+    const userId = rows[0]!.id
+
+    // on_user_created has already inserted the profile as a student; correct the
+    // name and role in the same transaction so a failure leaves no half-account.
+    await client.query('UPDATE profiles SET full_name = $2, role = $3 WHERE id = $1', [
+      userId,
+      full_name,
+      role,
+    ])
+
+    return userId
+  })
+
+  res.status(201).json({ data: { id: created, email, full_name, role } })
+})
+
+/**
+ * PATCH /api/admin/users/:id
+ *
+ * Edit somebody else's details. A student can already edit their own profile
+ * through /api/db, but that path is scoped to the caller's own row and cannot
+ * touch `users.email`.
+ *
+ * Email is the reason this endpoint exists rather than widening the profiles
+ * policy: the address is stored twice -- `users.email` is what login checks,
+ * `profiles.email` is what the UI renders. Updating only the profile would
+ * leave someone unable to sign in with the address shown next to their name.
+ */
+adminRouter.patch('/users/:id', requireAuth, async (req: Request, res: Response) => {
+  if (!adminOnly(req, res)) return
+
+  const idResult = z.string().uuid().safeParse(req.params.id)
+  if (!idResult.success) {
+    res.status(400).json({ error: { message: 'Invalid user id', code: 'INVALID' } })
+    return
+  }
+  const userId = idResult.data
+
+  const schema = z
+    .object({
+      full_name: z.string().min(1).max(200).optional(),
+      email: z.string().email().optional(),
+      phone: z.string().max(40).nullable().optional(),
+    })
+    .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' })
+
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) {
+    res.status(400).json({
+      error: {
+        message: parsed.error.issues[0]?.message ?? 'Invalid account details',
+        code: 'INVALID',
+      },
+    })
+    return
+  }
+
+  const target = await queryOne<{ id: string }>('SELECT id FROM users WHERE id = $1', [userId])
+  if (!target) {
+    res.status(404).json({ error: { message: 'No such user', code: 'NOT_FOUND' } })
+    return
+  }
+
+  const { full_name, email, phone } = parsed.data
+
+  if (email) {
+    const clash = await queryOne<{ id: string }>(
+      'SELECT id FROM users WHERE lower(email) = lower($1) AND id <> $2',
+      [email, userId]
+    )
+    if (clash) {
+      res.status(409).json({
+        error: { message: 'That email address is already registered', code: 'EMAIL_TAKEN' },
+      })
+      return
+    }
+  }
+
+  await transaction(async (client) => {
+    if (email) {
+      await client.query('UPDATE users SET email = $1 WHERE id = $2', [email, userId])
+    }
+
+    // COALESCE so an omitted field keeps its current value rather than nulling.
+    await client.query(
+      `UPDATE profiles
+          SET full_name = COALESCE($2, full_name),
+              email     = COALESCE($3, email),
+              phone     = CASE WHEN $4::boolean THEN $5 ELSE phone END
+        WHERE id = $1`,
+      [userId, full_name ?? null, email ?? null, phone !== undefined, phone ?? null]
+    )
+  })
+
+  const updated = await queryOne(
+    'SELECT id, full_name, email, phone, role FROM profiles WHERE id = $1',
+    [userId]
+  )
+
+  res.json({ data: updated })
+})
+
+/**
+ * DELETE /api/admin/users/:id
+ *
+ * Removes the account. Every dependent row is ON DELETE CASCADE from `users`,
+ * so this also erases the person's profile, submissions, quiz attempts, points
+ * ledger and team membership. There is no soft-delete in this schema.
+ */
+adminRouter.delete('/users/:id', requireAuth, async (req: Request, res: Response) => {
+  if (!adminOnly(req, res)) return
+
+  const idResult = z.string().uuid().safeParse(req.params.id)
+  if (!idResult.success) {
+    res.status(400).json({ error: { message: 'Invalid user id', code: 'INVALID' } })
+    return
+  }
+  const userId = idResult.data
+
+  // Deleting yourself would end the session mid-request and, if you were the
+  // only admin, lock the instance out of its own administration.
+  if (req.actor!.userId === userId) {
+    res.status(409).json({
+      error: { message: 'You cannot delete your own account', code: 'SELF_DELETE' },
+    })
+    return
+  }
+
+  const target = await queryOne<{ role: string }>('SELECT role FROM profiles WHERE id = $1', [
+    userId,
+  ])
+  if (!target) {
+    res.status(404).json({ error: { message: 'No such user', code: 'NOT_FOUND' } })
+    return
+  }
+
+  // Same reasoning as the demotion guard on PATCH /role.
+  if (target.role === 'admin') {
+    const others = await queryOne<{ count: number }>(
+      `SELECT count(*)::int AS count FROM profiles WHERE role = 'admin' AND id <> $1`,
+      [userId]
+    )
+    if ((others?.count ?? 0) === 0) {
+      res.status(409).json({
+        error: { message: 'Cannot delete the only remaining admin', code: 'LAST_ADMIN' },
+      })
+      return
+    }
+  }
+
+  await query('DELETE FROM users WHERE id = $1', [userId])
+
+  res.json({ data: { id: userId } })
 })
