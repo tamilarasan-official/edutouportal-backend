@@ -175,6 +175,52 @@ rpcRouter.post('/:name', requireAuth, async (req: Request, res: Response) => {
 })
 
 // ---------------------------------------------------------------------------
+// "Me" -- things about the caller that the generic query layer cannot express.
+// ---------------------------------------------------------------------------
+
+export const meRouter = Router()
+
+/**
+ * GET /api/me/mentor
+ *
+ * The student-facing My Mentor page needs the assigned mentor's contact
+ * details, which /api/db cannot return: the profiles policy redacts email,
+ * phone and bio for non-staff, and that redaction is column-level with an
+ * exception only for the caller's OWN row. A student reading their mentor's
+ * profile therefore gets a name and nothing else, which left the page rendering
+ * an empty address and a mailto: link pointing at "undefined".
+ *
+ * Relaxing the blanket rule would expose every mentor's address to every
+ * student. This endpoint instead returns exactly one profile -- the mentor the
+ * caller is actively assigned to -- resolved server-side from the caller's own
+ * id, so it cannot be pointed at anybody else.
+ */
+meRouter.get('/mentor', requireAuth, async (req: Request, res: Response) => {
+  const row = await queryOne<{
+    id: string
+    full_name: string | null
+    email: string | null
+    phone: string | null
+    bio: string | null
+    assigned_at: string
+    student_count: number
+  }>(
+    `SELECT p.id, p.full_name, p.email, p.phone, p.bio, ma.assigned_at,
+            (SELECT count(*)::int FROM mentor_assignments m
+              WHERE m.mentor_id = p.id AND m.status = 'active') AS student_count
+       FROM mentor_assignments ma
+       JOIN profiles p ON p.id = ma.mentor_id
+      WHERE ma.student_id = $1 AND ma.status = 'active'
+      LIMIT 1`,
+    [req.actor!.userId]
+  )
+
+  // Not an error: plenty of students have no mentor yet, and the page renders
+  // an empty state for it.
+  res.json({ data: row })
+})
+
+// ---------------------------------------------------------------------------
 // Admin-only account operations that used to be plain table writes.
 // ---------------------------------------------------------------------------
 

@@ -8,7 +8,7 @@ import { pool } from './db/pool.js'
 import { attachActor } from './middleware/auth.js'
 import { authRouter } from './auth/routes.js'
 import { queryRouter } from './query/routes.js'
-import { adminRouter, rpcRouter } from './rpc/routes.js'
+import { adminRouter, meRouter, rpcRouter } from './rpc/routes.js'
 import { quizRouter } from './quiz/routes.js'
 import { storageRouter } from './storage/routes.js'
 
@@ -130,6 +130,7 @@ export function createApp() {
   app.use('/api/db', queryRouter)
   app.use('/api/rpc', rpcRouter)
   app.use('/api/admin', adminRouter)
+  app.use('/api/me', meRouter)
   app.use('/api/quiz', quizRouter)
   app.use('/api/storage', storageRouter)
 
