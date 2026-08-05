@@ -6,6 +6,7 @@ import { pipeline } from 'node:stream/promises'
 import { config } from '../config.js'
 import { requireAuth } from '../middleware/auth.js'
 import type { Actor } from '../query/policies.js'
+import { classifyExtension } from './classify.js'
 import { compressUpload, describeSaving } from './compress.js'
 import { assertSafeKey, type ByteRange } from './driver.js'
 import { storage } from './index.js'
@@ -255,8 +256,15 @@ storageRouter.post(
     // The stored extension follows the stored BYTES. A key ending .jpeg whose
     // contents are WebP would be served as image/jpeg and render as garbage --
     // the download route derives the type from the extension by design.
-    const filename = `${Date.now()}-${randomUUID()}${compressed.extension || extension}`
-    const key = [...parts, filename].join('/')
+    const storedExtension = compressed.extension || extension
+
+    // Category comes from the STORED extension for the same reason: a phone
+    // HEIC is written as .webp, and classifying what arrived would file it
+    // under `other` while the download route served it as an image.
+    const category = classifyExtension(storedExtension)
+
+    const filename = `${Date.now()}-${randomUUID()}${storedExtension}`
+    const key = [category, ...parts, filename].join('/')
 
     console.log(
       `[storage] ${actor.userId} uploaded ${file.originalname}: ${describeSaving(compressed)}`
