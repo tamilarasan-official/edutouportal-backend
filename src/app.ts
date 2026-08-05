@@ -24,6 +24,16 @@ export function createApp() {
 
   // Behind Dokploy's reverse proxy, so the client IP that rate limiting and
   // cookie `secure` depend on comes from X-Forwarded-For.
+  //
+  // 1 assumes the browser reaches this API through exactly one proxy. That is
+  // NOT true when the portal proxies browser calls through its own server
+  // (NEXT_PUBLIC_API_PROXY_PATH=/backend, its default): the chain is then
+  // browser -> edge proxy -> Next -> here, and req.ip resolves to a piece of
+  // infrastructure shared by every user. Check GET /health/ip from a browser;
+  // if it does not return your own public address, raise this to 2.
+  //
+  // Left at 1 because raising it without checking is the worse mistake: an
+  // over-long chain lets a caller forge its own IP with a crafted header.
   app.set('trust proxy', 1)
 
   app.use(
@@ -50,15 +60,45 @@ export function createApp() {
   app.use(express.json({ limit: '2mb' }))
   app.use(cookieParser())
 
+  /**
+   * Who the `trust proxy` setting above resolves the caller to.
+   *
+   * Mounted above the rate limiter deliberately: the moment you most need to
+   * know whether req.ip is right is when a shared bucket is already returning
+   * 429, and an endpoint behind that bucket could not answer.
+   *
+   * Call it from a browser. `ip` should be your own public address. If it is a
+   * private/container address (10.x, 172.16-31.x, 192.168.x) or the same value
+   * for two people on different networks, the hop count is wrong and every
+   * per-IP limit below is being applied to the whole userbase at once.
+   */
+  app.get('/health/ip', (req: Request, res: Response) => {
+    res.json({
+      ip: req.ip,
+      trustProxy: app.get('trust proxy'),
+      forwardedFor: req.headers['x-forwarded-for'] ?? null,
+    })
+  })
+
   // Blanket ceiling. The auth routes add their own, much tighter, limits.
   // Disabled under NODE_ENV=test so a fast test run is not throttled.
+  //
+  // Sized for the whole userbase, not for one person. This is keyed per IP, and
+  // while the portal proxies browser calls through its own server every user
+  // shares this single bucket -- at 300 a class of 200 exhausted it in seconds
+  // and everyone was locked out. 3000/min holds a few hundred concurrent
+  // students; it is a runaway-client backstop, and the per-account cap in
+  // auth/routes.ts is what actually resists password guessing.
+  //
+  // Once GET /health/ip shows a real client address, this can come back down.
   if (config.NODE_ENV !== 'test') {
     app.use(
       rateLimit({
         windowMs: 60_000,
-        limit: 300,
+        limit: 3000,
         standardHeaders: 'draft-7',
         legacyHeaders: false,
+        message: { error: { message: 'Too many requests', code: 'RATE_LIMITED' } },
       })
     )
   }

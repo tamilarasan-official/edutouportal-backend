@@ -31,28 +31,84 @@ export const authRouter = Router()
  * in the old app did once we own the server.
  *
  * Disabled under NODE_ENV=test only: the integration suite creates dozens of
- * accounts from one address, and a 5-per-hour signup cap makes the whole suite
+ * accounts from one address, and a per-IP signup cap makes the whole suite
  * unrunnable. Production and development keep the real limits.
  */
 const noopLimiter = (_req: Request, _res: Response, next: () => void) => next()
 
+/**
+ * The account a login attempt is aimed at, as the limiter's key.
+ *
+ * Keying logins by IP throttles the wrong thing. A class signing in from one
+ * campus address -- or, once the portal proxies browser calls through its own
+ * server, *every* user everywhere -- shares a single bucket, so a cap meant to
+ * stop password guessing instead locks out a cohort after the first few
+ * succeed. The thing actually worth capping is attempts against one account.
+ *
+ * Falls back to the IP when no email was submitted -- a malformed body still
+ * has to be counted, or the cap is bypassed by simply omitting the field. That
+ * fallback matches what this version of the library does by default, including
+ * its blind spot: an IPv6 caller is keyed per address rather than per /64, and
+ * such a client is routinely handed more addresses than a per-address limit
+ * could ever exhaust. It bounds the malformed-body path only, so the per
+ * account cap above is unaffected.
+ */
+function loginKey(req: Request): string {
+  const email = (req.body as { email?: unknown } | undefined)?.email
+  if (typeof email === 'string' && email.trim()) return `user:${email.trim().toLowerCase()}`
+  return `ip:${req.ip ?? 'unknown'}`
+}
+
+/**
+ * Per-account cap on FAILED logins.
+ *
+ * `skipSuccessfulRequests` is what makes a large cohort work: a student who
+ * types the right password consumes no quota at all, so the limit is only ever
+ * spent by attempts that look like guessing.
+ */
 const loginLimiter =
   config.NODE_ENV === 'test'
     ? noopLimiter
     : rateLimit({
         windowMs: 15 * 60 * 1000,
         limit: 10,
+        keyGenerator: loginKey,
+        skipSuccessfulRequests: true,
         standardHeaders: 'draft-7',
         legacyHeaders: false,
         message: { error: { message: 'Too many attempts, try again later', code: 'RATE_LIMITED' } },
       })
 
+/**
+ * Secondary net: failed logins from one IP across *all* accounts, which the
+ * per-account cap above cannot see. Deliberately loose -- it exists to stop one
+ * host spraying a password across thousands of accounts, not to bound normal
+ * traffic, and it is shared by everyone behind a NAT or a proxy.
+ */
+const loginIpLimiter =
+  config.NODE_ENV === 'test'
+    ? noopLimiter
+    : rateLimit({
+        windowMs: 15 * 60 * 1000,
+        limit: 1000,
+        skipSuccessfulRequests: true,
+        standardHeaders: 'draft-7',
+        legacyHeaders: false,
+        message: { error: { message: 'Too many attempts, try again later', code: 'RATE_LIMITED' } },
+      })
+
+/**
+ * Signups per IP. Anti-scripting only, and sized so a supervised classroom
+ * registering together does not trip it -- the real defences against a junk
+ * account are email verification (POST /auth/verify-otp) and the fact that
+ * signup always yields a student with no privileges.
+ */
 const signupLimiter =
   config.NODE_ENV === 'test'
     ? noopLimiter
     : rateLimit({
         windowMs: 60 * 60 * 1000,
-        limit: 5,
+        limit: 500,
         standardHeaders: 'draft-7',
         legacyHeaders: false,
         message: {
@@ -175,7 +231,7 @@ const LoginSchema = z.object({
   password: z.string().min(1).max(200),
 })
 
-authRouter.post('/login', loginLimiter, async (req: Request, res: Response) => {
+authRouter.post('/login', loginIpLimiter, loginLimiter, async (req: Request, res: Response) => {
   const parsed = LoginSchema.safeParse(req.body)
   if (!parsed.success) {
     res.status(400).json({ error: { message: 'Invalid credentials', code: 'INVALID' } })
