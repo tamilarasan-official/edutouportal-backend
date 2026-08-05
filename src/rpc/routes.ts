@@ -334,7 +334,14 @@ adminRouter.post('/users', requireAuth, async (req: Request, res: Response) => {
  * leave someone unable to sign in with the address shown next to their name.
  */
 adminRouter.patch('/users/:id', requireAuth, async (req: Request, res: Response) => {
-  if (!adminOnly(req, res)) return
+  const actor = req.actor!
+
+  // Mentors get a narrow slice of this: their own students, and only the fields
+  // that are not credentials. Everyone else must be an admin.
+  if (actor.role !== 'admin' && actor.role !== 'mentor') {
+    res.status(403).json({ error: { message: 'Admins only', code: 'FORBIDDEN' } })
+    return
+  }
 
   const idResult = z.string().uuid().safeParse(req.params.id)
   if (!idResult.success) {
@@ -369,6 +376,29 @@ adminRouter.patch('/users/:id', requireAuth, async (req: Request, res: Response)
   }
 
   const { full_name, email, phone } = parsed.data
+
+  if (actor.role === 'mentor') {
+    // Email is the address login checks, so changing it can lock someone out or
+    // hand their account to a different inbox. That stays with admins.
+    if (email !== undefined) {
+      res.status(403).json({
+        error: {
+          message: 'Only an admin can change the sign-in email',
+          code: 'FORBIDDEN_FIELD',
+        },
+      })
+      return
+    }
+
+    // Scope: an active assignment to THIS mentor. Without the status check a
+    // mentor would keep write access to students they no longer teach.
+    if (!(await mentorOwnsStudent(actor.userId, userId))) {
+      res.status(403).json({
+        error: { message: 'That student is not assigned to you', code: 'FORBIDDEN' },
+      })
+      return
+    }
+  }
 
   if (email) {
     const clash = await queryOne<{ id: string }>(
