@@ -574,6 +574,83 @@ describe('student portal: hackathon teams', () => {
 })
 
 // ---------------------------------------------------------------------------
+describe('mentor dashboard: hackathon team scoping', () => {
+  // Assign a student to a mentor and have that student lead a team.
+  async function studentWithTeam(
+    admin: Awaited<ReturnType<typeof createUser>>,
+    mentorId: string,
+    teamCode: string
+  ) {
+    const student = await createUser(base, 'student')
+    await admin.client.db({
+      table: 'mentor_assignments',
+      op: 'insert',
+      values: { student_id: student.id, mentor_id: mentorId, status: 'active' },
+    })
+    const team = await student.client.db({
+      table: 'hackathon_teams',
+      op: 'insert',
+      values: { team_name: `Team ${teamCode}`, team_code: teamCode },
+    })
+    return { student, teamId: team.body.data[0].id as string }
+  }
+
+  it("a mentor sees only their own students' teams, not another mentor's", async () => {
+    const admin = await createUser(base, 'admin')
+    const rishi = await createUser(base, 'mentor')
+    const vishal = await createUser(base, 'mentor')
+
+    const rishiTeam = await studentWithTeam(admin, rishi.id, 'RISH01')
+    const vishalTeam = await studentWithTeam(admin, vishal.id, 'VISH01')
+
+    const seenByVishal = await vishal.client.db({ table: 'hackathon_teams', op: 'select' })
+    const ids = seenByVishal.body.data.map((t: any) => t.id)
+
+    // The reported bug: Rishi's team appearing on Vishal's dashboard.
+    assert.ok(ids.includes(vishalTeam.teamId), "Vishal must see his own student's team")
+    assert.ok(!ids.includes(rishiTeam.teamId), "Vishal must NOT see Rishi's student's team")
+  })
+
+  it('an admin still sees every team', async () => {
+    const admin = await createUser(base, 'admin')
+    const rishi = await createUser(base, 'mentor')
+    const rishiTeam = await studentWithTeam(admin, rishi.id, 'RISH02')
+
+    const seen = await admin.client.db({ table: 'hackathon_teams', op: 'select' })
+    const ids = seen.body.data.map((t: any) => t.id)
+    assert.ok(ids.includes(rishiTeam.teamId))
+  })
+
+  it("a mentor cannot edit a team that is not their student's", async () => {
+    const admin = await createUser(base, 'admin')
+    const rishi = await createUser(base, 'mentor')
+    const vishal = await createUser(base, 'mentor')
+    const rishiTeam = await studentWithTeam(admin, rishi.id, 'RISH03')
+
+    // Vishal tries to set a theme on Rishi's student's team.
+    const res = await vishal.client.db({
+      table: 'hackathon_teams',
+      op: 'update',
+      values: { theme: 'hijacked' },
+      filters: [{ column: 'id', op: 'eq', value: rishiTeam.teamId }],
+    })
+
+    // The policy filter matches no rows for Vishal, so nothing is updated.
+    assert.equal(res.body.data.length, 0)
+
+    // Rishi, who owns the student, can edit it.
+    const ok = await rishi.client.db({
+      table: 'hackathon_teams',
+      op: 'update',
+      values: { theme: 'robotics' },
+      filters: [{ column: 'id', op: 'eq', value: rishiTeam.teamId }],
+    })
+    assert.equal(ok.body.data.length, 1)
+    assert.equal(ok.body.data[0].theme, 'robotics')
+  })
+})
+
+// ---------------------------------------------------------------------------
 describe('student portal: feedback and settings', () => {
   it('submits feedback about a mentor', async () => {
     const mentor = await createUser(base, 'mentor')

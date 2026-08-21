@@ -306,10 +306,28 @@ const POLICIES: Record<TableName, Partial<Record<Operation, PolicyFn>>> = {
 
   // ---------------------------------------------------------------------------
   hackathon_teams: {
-    select: () => ALLOW,
+    // A mentor manages only the teams led by their own assigned students, so
+    // one mentor's teams never surface on another's dashboard. Students keep an
+    // unfiltered read because joining a team means looking it up by its code --
+    // a team led by someone else's student -- and admins oversee everyone.
+    select: (a) =>
+      a.role === 'mentor' ? { allow: true, filter: ownStudents('leader_id', a) } : ALLOW,
     insert: (a) => ({ allow: true, force: { leader_id: a.userId } }),
-    update: (a) => (isStaff(a) ? ALLOW : { allow: true, filter: own('leader_id', a) }),
-    delete: (a) => (isStaff(a) ? ALLOW : { allow: true, filter: own('leader_id', a) }),
+    // Editing a team's theme is the mentor write path; scope it the same way so
+    // a mentor cannot edit or delete a team that is not their student's. The
+    // leader (a student) can still manage their own team.
+    update: (a) =>
+      a.role === 'admin'
+        ? ALLOW
+        : a.role === 'mentor'
+          ? { allow: true, filter: ownStudents('leader_id', a) }
+          : { allow: true, filter: own('leader_id', a) },
+    delete: (a) =>
+      a.role === 'admin'
+        ? ALLOW
+        : a.role === 'mentor'
+          ? { allow: true, filter: ownStudents('leader_id', a) }
+          : { allow: true, filter: own('leader_id', a) },
   },
 
   hackathon_team_members: {
