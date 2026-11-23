@@ -63,6 +63,7 @@ export async function truncateAll(): Promise<void> {
       notification_reads, notifications, resources, session_tracker,
       session_feedback_responses, feedback_sessions, feedback,
       mentor_assignments, points_history, leaderboard,
+      learn_page, learn_registrations,
       profiles, oauth_identities, refresh_tokens, one_time_tokens, users
     RESTART IDENTITY CASCADE
   `)

@@ -39,7 +39,16 @@ const BUCKETS = {
     visibility: 'authenticated' as const,
     maxBytes: config.MAX_UPLOAD_BYTES,
   },
+  'site-media': {
+    // Images for public marketing pages (learn.edutou.in). Anyone may read;
+    // only admins may upload. Images only -- see SITE_MEDIA_EXTENSIONS.
+    visibility: 'public' as const,
+    maxBytes: config.MAX_UPLOAD_BYTES,
+  },
 } as const
+
+/** What may go into the public site-media bucket. Raster images only. */
+const SITE_MEDIA_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp'])
 
 type BucketName = keyof typeof BUCKETS
 
@@ -218,6 +227,11 @@ storageRouter.post(
       return
     }
 
+    if (bucketName === 'site-media' && actor.role !== 'admin') {
+      res.status(403).json({ error: { message: 'Admins only', code: 'FORBIDDEN' } })
+      return
+    }
+
     const file = req.file
     if (!file) {
       res.status(400).json({ error: { message: 'No file supplied', code: 'NO_FILE' } })
@@ -230,6 +244,13 @@ storageRouter.post(
     }
 
     const extension = extname(file.originalname).toLowerCase()
+    if (bucketName === 'site-media' && !SITE_MEDIA_EXTENSIONS.has(extension)) {
+      res.status(415).json({
+        error: { message: 'Only PNG, JPG, GIF or WebP images can be used on the site', code: 'BLOCKED_TYPE' },
+      })
+      return
+    }
+
     if (BLOCKED_EXTENSIONS.has(extension)) {
       res.status(415).json({
         error: { message: `Files of type ${extension} are not accepted`, code: 'BLOCKED_TYPE' },
@@ -425,14 +446,16 @@ storageRouter.get('/:bucket/*', async (req: Request, res: Response) => {
     ? { userId: grant.userId, role: grant.role }
     : req.actor
 
-  if (!actor) {
+  const isPublic = BUCKETS[bucketName].visibility === 'public'
+
+  if (!actor && !isPublic) {
     res.status(401).json({ error: { message: 'Not authenticated', code: 'UNAUTHENTICATED' } })
     return
   }
 
   // Re-run the check even for a signed request: the signature proves who asked
   // for the link, not that they are still entitled to the file.
-  if (!mayRead(bucketName, key, actor)) {
+  if (!isPublic && !mayRead(bucketName, key, actor!)) {
     res.status(403).json({ error: { message: 'Not your file', code: 'FORBIDDEN' } })
     return
   }
@@ -489,7 +512,7 @@ storageRouter.get('/:bucket/*', async (req: Request, res: Response) => {
 
   // Kept in both branches: stops the browser second-guessing the type we set.
   res.setHeader('X-Content-Type-Options', 'nosniff')
-  res.setHeader('Cache-Control', 'private, max-age=3600')
+  res.setHeader('Cache-Control', isPublic ? 'public, max-age=86400' : 'private, max-age=3600')
   // Seeking in a video or a long PDF depends on this being advertised.
   res.setHeader('Accept-Ranges', 'bytes')
 

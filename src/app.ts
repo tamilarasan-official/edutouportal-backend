@@ -11,6 +11,7 @@ import { queryRouter } from './query/routes.js'
 import { adminRouter, meRouter, rpcRouter } from './rpc/routes.js'
 import { quizRouter } from './quiz/routes.js'
 import { storageRouter } from './storage/routes.js'
+import { learnRouter } from './learn/routes.js'
 
 /**
  * Builds the Express app without binding a port.
@@ -133,6 +134,7 @@ export function createApp() {
   app.use('/api/me', meRouter)
   app.use('/api/quiz', quizRouter)
   app.use('/api/storage', storageRouter)
+  app.use('/api/learn', learnRouter)
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: { message: 'Not found', code: 'NOT_FOUND' } })
