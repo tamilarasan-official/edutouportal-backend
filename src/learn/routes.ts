@@ -140,11 +140,49 @@ learnRouter.post('/register', registerLimiter, wrap(async (req: Request, res: Re
     return
   }
 
-  await query(
-    `INSERT INTO learn_registrations (name, email, whatsapp, profession, city, utm_source, utm_medium, utm_campaign)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [r.name, r.email, `+91${r.phone}`, r.profession, r.city, r.utm_source || null, r.utm_medium || null, r.utm_campaign || null]
+  const course = content.webinar.course
+  const whatsapp = `+91${r.phone}`
+
+  // One registration per email and per WhatsApp number for each course. Checked
+  // here to name the field that clashed; the unique indexes from migration 0010
+  // are what actually guarantee it, including for two simultaneous submissions.
+  const duplicateResponse = (errors: Record<string, string>) =>
+    res.status(409).json({
+      error: { message: 'You have already registered for this course.', code: 'ALREADY_REGISTERED', errors },
+    })
+
+  const clash = await queryOne<{ email_taken: boolean; phone_taken: boolean }>(
+    `SELECT bool_or(lower(email) = $2) AS email_taken, bool_or(whatsapp = $3) AS phone_taken
+       FROM learn_registrations
+      WHERE course = $1 AND (lower(email) = $2 OR whatsapp = $3)`,
+    [course, r.email, whatsapp]
   )
+  if (clash?.email_taken || clash?.phone_taken) {
+    const errors: Record<string, string> = {}
+    if (clash.email_taken) errors.email = 'This email is already registered for this course.'
+    if (clash.phone_taken) errors.phone = 'This WhatsApp number is already registered for this course.'
+    duplicateResponse(errors)
+    return
+  }
+
+  try {
+    await query(
+      `INSERT INTO learn_registrations (course, name, email, whatsapp, profession, city, utm_source, utm_medium, utm_campaign)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [course, r.name, r.email, whatsapp, r.profession, r.city, r.utm_source || null, r.utm_medium || null, r.utm_campaign || null]
+    )
+  } catch (err) {
+    const pgErr = err as { code?: string; constraint?: string }
+    if (pgErr.code === '23505') {
+      duplicateResponse(
+        pgErr.constraint === 'learn_registrations_course_whatsapp_key'
+          ? { phone: 'This WhatsApp number is already registered for this course.' }
+          : { email: 'This email is already registered for this course.' }
+      )
+      return
+    }
+    throw err
+  }
 
   res.status(201).json({ data: { ok: true } })
 }))
@@ -152,7 +190,7 @@ learnRouter.post('/register', registerLimiter, wrap(async (req: Request, res: Re
 learnRouter.get('/registrations', requireRole('admin'), wrap(async (req: Request, res: Response) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 5000)
   const rows = await query(
-    `SELECT id, name, email, whatsapp, profession, city, utm_source, utm_medium, utm_campaign, created_at
+    `SELECT id, course, name, email, whatsapp, profession, city, utm_source, utm_medium, utm_campaign, created_at
        FROM learn_registrations
       ORDER BY created_at DESC
       LIMIT $1`,

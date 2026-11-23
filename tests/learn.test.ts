@@ -97,8 +97,48 @@ describe('learn registrations', () => {
 
   it('accepts a number typed with +91 or a leading 0', async () => {
     const anon = new Client(base)
-    assert.equal((await anon.post('/api/learn/register', { ...validSignup, phone: '+91 98765 43210' })).status, 201)
-    assert.equal((await anon.post('/api/learn/register', { ...validSignup, phone: '09876543210' })).status, 201)
+    assert.equal((await anon.post('/api/learn/register', { ...validSignup, email: 'a@x.dev', phone: '+91 98765 43210' })).status, 201)
+    assert.equal((await anon.post('/api/learn/register', { ...validSignup, email: 'b@x.dev', phone: '09123456780' })).status, 201)
+  })
+
+  it('refuses a second sign-up for the same course with the same email', async () => {
+    const anon = new Client(base)
+    assert.equal((await anon.post('/api/learn/register', validSignup)).status, 201)
+    const again = await anon.post('/api/learn/register', { ...validSignup, email: 'PRIYA@example.com', phone: '9000000001' })
+    assert.equal(again.status, 409)
+    assert.equal(again.body.error.code, 'ALREADY_REGISTERED')
+    assert.ok(again.body.error.errors.email)
+    assert.equal(again.body.error.errors.phone, undefined)
+  })
+
+  it('refuses a second sign-up for the same course with the same WhatsApp number in any format', async () => {
+    const anon = new Client(base)
+    assert.equal((await anon.post('/api/learn/register', validSignup)).status, 201)
+    const again = await anon.post('/api/learn/register', { ...validSignup, email: 'other@example.com', phone: '+91 9876543210' })
+    assert.equal(again.status, 409)
+    assert.ok(again.body.error.errors.phone)
+    assert.equal(again.body.error.errors.email, undefined)
+  })
+
+  it('stores only one row when the same person submits twice at once', async () => {
+    const results = await Promise.all([1, 2, 3].map(() => new Client(base).post('/api/learn/register', validSignup)))
+    assert.deepEqual(results.map((r) => r.status).sort(), [201, 409, 409])
+    const admin = await createUser(base, 'admin')
+    assert.equal((await admin.client.get('/api/learn/registrations')).body.count, 1)
+  })
+
+  it('allows the same person to register again once the course changes', async () => {
+    const anon = new Client(base)
+    assert.equal((await anon.post('/api/learn/register', validSignup)).status, 201)
+
+    const admin = await createUser(base, 'admin')
+    const saved = await admin.client.request('PUT', '/api/learn/page', { content: { webinar: { course: 'AI Agents - January batch' } } })
+    assert.equal(saved.status, 200)
+
+    assert.equal((await anon.post('/api/learn/register', validSignup)).status, 201)
+    const list = (await admin.client.get('/api/learn/registrations')).body
+    assert.equal(list.count, 2)
+    assert.deepEqual(list.data.map((r: any) => r.course).sort(), ['AI Agents - January batch', 'Free AI Webinar'])
   })
 
   it('returns a message per invalid field', async () => {

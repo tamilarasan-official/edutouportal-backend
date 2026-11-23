@@ -56,6 +56,9 @@ export const learnPageSchema = z.object({
   webinar: z
     .object({
       title: text(80, 'Free AI Webinar'),
+      // Registrations are de-duplicated per course: the same email or WhatsApp
+      // number can sign up once for each course name. Change it to open a new batch.
+      course: z.string().trim().min(1).max(80).default('Free AI Webinar'),
       when: text(80, 'Date & time announced soon'),
       duration: text(40, '90 minutes'),
       language: text(60, 'English & Tamil'),
