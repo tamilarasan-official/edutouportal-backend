@@ -7,6 +7,7 @@ import { ensureStorageReady } from './storage/routes.js'
 import { attachRealtime } from './realtime/hub.js'
 import { purgeExpiredTokens } from './auth/tokens.js'
 import { bootstrapAdmin } from './auth/bootstrap.js'
+import { seedCmsIfEmpty } from './cms/seed.js'
 
 const server = createServer(createApp())
 
@@ -23,6 +24,10 @@ async function start(): Promise<void> {
   await bootstrapAdmin().catch((err) =>
     console.error('[bootstrap] failed to create the initial admin:', err)
   )
+
+  // First start against an empty CMS: load the starting programmes. A no-op
+  // afterwards, so admin edits are never overwritten.
+  await seedCmsIfEmpty().catch((err) => console.error('[cms] seeding failed:', err))
 
   attachRealtime(server)
 

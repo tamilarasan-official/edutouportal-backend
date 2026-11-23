@@ -1,0 +1,1809 @@
+{
+  "categories": [
+    {
+      "id": "courses",
+      "title": "Online Programmes",
+      "description": "Structured, domain-specific learning programmes",
+      "sortOrder": 10
+    },
+    {
+      "id": "workshops",
+      "title": "Workshops",
+      "description": "Short-duration, practical learning experiences",
+      "sortOrder": 20
+    },
+    {
+      "id": "bootcamps",
+      "title": "Bootcamps",
+      "description": "Intensive, hands-on skill development",
+      "sortOrder": 30
+    },
+    {
+      "id": "masterclasses",
+      "title": "Masterclasses",
+      "description": "Expert-led advanced learning sessions",
+      "sortOrder": 40
+    },
+    {
+      "id": "internship-programmes",
+      "title": "Internship Programmes",
+      "description": "Industry exposure and practical experience",
+      "sortOrder": 50
+    },
+    {
+      "id": "specialised-programmes",
+      "title": "Specialised Programmes",
+      "description": "Customised and interdisciplinary learning",
+      "sortOrder": 60
+    }
+  ],
+  "domains": [
+    "AI",
+    "CSE",
+    "ECE",
+    "EEE",
+    "Robotics",
+    "Drone",
+    "AMR",
+    "VLSI",
+    "PCB"
+  ],
+  "programmes": [
+    {
+      "slug": "ai-native-software-engineering",
+      "status": "published",
+      "sortOrder": 10,
+      "data": {
+        "title": "Industry Internship: AI-Native Software Engineering",
+        "category": "courses",
+        "alsoIn": [
+          "internship-programmes"
+        ],
+        "domains": [
+          "AI",
+          "CSE"
+        ],
+        "type": "Internship",
+        "pricing": {
+          "model": "paid",
+          "amount": null,
+          "currency": "INR",
+          "note": "Fees depend on the plan"
+        },
+        "payment": {
+          "collectOnline": false,
+          "provider": "",
+          "productRef": ""
+        },
+        "schedule": {
+          "startDate": "",
+          "time": "",
+          "duration": "",
+          "mode": "",
+          "language": "",
+          "seats": null
+        },
+        "image": {
+          "url": "/internships/ai-native-software.jpg",
+          "alt": "A mentor walking students through a live deployment",
+          "focus": "40% 45%"
+        },
+        "card": {
+          "meta": [
+            "7, 10, 14, 21 or 30 days · full-time",
+            "On campus, hybrid or online",
+            "Open to all departments"
+          ],
+          "summary": "Build, secure and ship real software with AI, alongside teams doing it today. Plan with AI, code with AI agents, then review, test and ship on live partner briefs, in collaboration with 9 industry partners.",
+          "highlights": [
+            "AI-native dev workflow",
+            "Full-stack web",
+            "Mobile apps",
+            "LLM apps & agents",
+            "Web data & pipelines",
+            "Cloud & DevOps",
+            "Cybersecurity essentials",
+            "Low-code enterprise AI (elective)"
+          ],
+          "tools": [
+            "Cursor",
+            "Claude Code",
+            "GitHub Copilot",
+            "Python",
+            "TypeScript",
+            "React",
+            "Next.js",
+            "Node.js",
+            "FastAPI",
+            "Flutter",
+            "PostgreSQL",
+            "MongoDB",
+            "LangChain",
+            "Docker",
+            "AWS",
+            "Burp Suite",
+            "Mendix"
+          ],
+          "details": {
+            "enabled": true,
+            "roles": [
+              "AI-native full-stack developer",
+              "LLM / AI application engineer",
+              "Mobile app developer",
+              "Data engineer",
+              "Security analyst",
+              "DevOps / cloud engineer"
+            ],
+            "projects": [
+              "Research agent that pulls live web data into structured JSON",
+              "Agent that drafts a weekly SEO report for an agency client",
+              "Attack-surface scan of a test domain, with a fix-it report",
+              "Support voice agent that answers from company documents",
+              "Document-AI app that reads invoices into structured data",
+              "Seller onboarding dashboard on ONDC"
+            ],
+            "note": "Every plan runs in four stages: onboard, learn, build on a live partner project, and showcase on the final day. You leave with a co-branded Edutou + industry partner certificate and a GitHub portfolio. Fees depend on the plan; scholarships are available."
+          }
+        },
+        "page": {
+          "enabled": true,
+          "eyebrow": "Industry Internship Programme",
+          "tagline": "Build, secure and ship real software with AI, alongside teams doing it today.",
+          "topics": [
+            "AI-native development",
+            "Full-stack",
+            "LLM apps & agents",
+            "Data",
+            "Cybersecurity"
+          ],
+          "facts": [
+            {
+              "value": "7–30 days",
+              "label": "Full-time plans"
+            },
+            {
+              "value": "3 modes",
+              "label": "On campus, hybrid or online"
+            },
+            {
+              "value": "All departments",
+              "label": "Engineering and arts & science"
+            },
+            {
+              "value": "Co-branded",
+              "label": "Edutou + partner certificate"
+            },
+            {
+              "value": "9 partners",
+              "label": "Industry collaborators"
+            }
+          ],
+          "primaryButton": "Enquire / Enrol",
+          "counsellor": {
+            "name": "Bewin Joel",
+            "phone": "+91 63853 15565"
+          },
+          "blocks": [
+            {
+              "id": "why-1",
+              "type": "text_media",
+              "label": "Why this track, why now",
+              "title": "Software is now built with AI. Learn to build it that way.",
+              "lead": "",
+              "paragraphs": [
+                "Teams no longer write every line by hand. They plan with AI, code with AI agents, then review, test and ship what matters.",
+                "This internship puts you inside that workflow on real partner projects. You learn the judgement AI can't replace: what to build, how to check it, and how to ship it safely."
+              ],
+              "stat": {
+                "prefix": "",
+                "value": "73%",
+                "label": "of developers who use AI coding assistants or agents use them every day.",
+                "source": "Stack Overflow Developer Survey 2026"
+              },
+              "image": {
+                "url": "/internships/ai-native-software.jpg",
+                "alt": "A mentor walking students through a live deployment",
+                "focus": "40% 45%"
+              }
+            },
+            {
+              "id": "roles-2",
+              "type": "cards",
+              "label": "Roles you can grow into",
+              "title": "Where this track can take you.",
+              "lead": "Six roles this track prepares you to grow into.",
+              "columns": 3,
+              "numbered": true,
+              "numberPrefix": "Role ",
+              "items": [
+                {
+                  "title": "AI-native full-stack developer",
+                  "desc": ""
+                },
+                {
+                  "title": "LLM / AI application engineer",
+                  "desc": ""
+                },
+                {
+                  "title": "Mobile app developer",
+                  "desc": ""
+                },
+                {
+                  "title": "Data engineer",
+                  "desc": ""
+                },
+                {
+                  "title": "Security analyst",
+                  "desc": ""
+                },
+                {
+                  "title": "DevOps / cloud engineer",
+                  "desc": ""
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "audience-3",
+              "type": "split_list",
+              "label": "Who it's for",
+              "title": "Open to every department.",
+              "lead": "",
+              "body": "Engineering or arts & science, any year. If you want to build software with AI, this track is for you.",
+              "noteLabel": "Helpful, not required",
+              "note": "Basics of any programming language.",
+              "listTitle": "What you walk away with",
+              "list": [
+                "A live project shipped on an industry partner's brief",
+                "A public GitHub portfolio of your work",
+                "Daily, hands-on practice with AI coding agents",
+                "A co-branded internship certificate from Edutou and your industry partner"
+              ]
+            },
+            {
+              "id": "partners-4",
+              "type": "cards",
+              "label": "Industry partners",
+              "title": "Work with teams building at the frontier.",
+              "lead": "Every project comes from a partner doing this work today.",
+              "columns": 3,
+              "numbered": false,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Digimaxx",
+                  "desc": "Build AI agents and workflow automation for live enterprise and government clients."
+                },
+                {
+                  "title": "DataBlue",
+                  "desc": "Build web-data pipelines that feed AI agents and RAG systems."
+                },
+                {
+                  "title": "enque.ai",
+                  "desc": "Build AI agent workflows and dashboards for digital marketing agencies."
+                },
+                {
+                  "title": "TargetHunt",
+                  "desc": "Scan real attack surfaces and write security fix-it reports."
+                },
+                {
+                  "title": "Valar Digital Commerce",
+                  "desc": "Build commerce integrations and seller dashboards on ONDC, India's open commerce network."
+                },
+                {
+                  "title": "localhost",
+                  "desc": "Build full-stack, cloud and data features for startups and enterprises."
+                },
+                {
+                  "title": "Hitasoft",
+                  "desc": "Build LLM apps, voice agents and AI automations."
+                },
+                {
+                  "title": "appkodes",
+                  "desc": "Add AI features to production mobile and web apps."
+                },
+                {
+                  "title": "MX Techies",
+                  "desc": "Build enterprise AI apps on the Mendix low-code platform."
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "modules-5",
+              "type": "cards",
+              "label": "What you'll learn",
+              "title": "Eight modules. One way of working: AI-first.",
+              "lead": "The modules you cover depend on your plan length.",
+              "columns": 4,
+              "numbered": true,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "AI-native dev workflow",
+                  "desc": "Plan, prompt, review and merge with Cursor, Claude Code and GitHub Copilot."
+                },
+                {
+                  "title": "Full-stack web",
+                  "desc": "Build apps with React / Next.js, Node.js or FastAPI, and PostgreSQL."
+                },
+                {
+                  "title": "Mobile apps",
+                  "desc": "Ship cross-platform apps with Flutter or React Native."
+                },
+                {
+                  "title": "LLM apps & agents",
+                  "desc": "Build with Claude, GPT and Gemini APIs, RAG, tool use and MCP."
+                },
+                {
+                  "title": "Web data & pipelines",
+                  "desc": "Turn live web data into clean, structured input for AI."
+                },
+                {
+                  "title": "Cloud & DevOps",
+                  "desc": "Containerise, automate and deploy with Docker, GitHub Actions and AWS."
+                },
+                {
+                  "title": "Cybersecurity essentials",
+                  "desc": "Find and fix real weaknesses using the OWASP Top 10."
+                },
+                {
+                  "title": "Low-code enterprise AI (elective)",
+                  "desc": "Build business AI apps on Mendix."
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "toolkit-6",
+              "type": "tag_groups",
+              "label": "Your toolkit",
+              "title": "Work with the tools teams use today.",
+              "lead": "Grouped the way you'll use them on live projects.",
+              "groups": [
+                {
+                  "name": "AI coding",
+                  "items": [
+                    "Cursor",
+                    "Claude Code",
+                    "GitHub Copilot"
+                  ]
+                },
+                {
+                  "name": "Build",
+                  "items": [
+                    "Python",
+                    "TypeScript",
+                    "React",
+                    "Next.js",
+                    "Node.js",
+                    "FastAPI",
+                    "Flutter"
+                  ]
+                },
+                {
+                  "name": "Data",
+                  "items": [
+                    "PostgreSQL",
+                    "MongoDB",
+                    "BigQuery"
+                  ]
+                },
+                {
+                  "name": "AI",
+                  "items": [
+                    "Claude",
+                    "GPT",
+                    "Gemini",
+                    "LangChain"
+                  ]
+                },
+                {
+                  "name": "Ship",
+                  "items": [
+                    "Git",
+                    "GitHub",
+                    "Docker",
+                    "Vercel",
+                    "AWS"
+                  ]
+                },
+                {
+                  "name": "Security",
+                  "items": [
+                    "Burp Suite",
+                    "OWASP ZAP",
+                    "Nmap"
+                  ]
+                },
+                {
+                  "name": "Low-code",
+                  "items": [
+                    "Mendix"
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "projects-7",
+              "type": "cards",
+              "label": "Live projects",
+              "title": "Real briefs. Real teams. Real code.",
+              "lead": "Sample projects. Final briefs come from partners and depend on your plan.",
+              "columns": 3,
+              "numbered": true,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Research agent that pulls live web data into structured JSON",
+                  "desc": ""
+                },
+                {
+                  "title": "Agent that drafts a weekly SEO report for an agency client",
+                  "desc": ""
+                },
+                {
+                  "title": "Tracker that checks how AI assistants describe a brand",
+                  "desc": ""
+                },
+                {
+                  "title": "Attack-surface scan of a test domain, with a fix-it report",
+                  "desc": ""
+                },
+                {
+                  "title": "Support voice agent that answers from company documents",
+                  "desc": ""
+                },
+                {
+                  "title": "Document-AI app that reads invoices into structured data",
+                  "desc": ""
+                },
+                {
+                  "title": "AI smart search for a marketplace mobile app",
+                  "desc": ""
+                },
+                {
+                  "title": "Seller onboarding dashboard on ONDC",
+                  "desc": ""
+                },
+                {
+                  "title": "Cloud deployment and monitoring for a production web app",
+                  "desc": ""
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "plans-8",
+              "type": "plans",
+              "label": "How the internship runs",
+              "title": "Pick your plan. Work a full industry day, every day.",
+              "lead": "Every plan is full-time. Longer plans go deeper.",
+              "plansTitle": "Choose your plan",
+              "plans": [
+                {
+                  "name": "7 days",
+                  "desc": "Core foundations and a guided mini-project",
+                  "weight": 23
+                },
+                {
+                  "name": "10 days",
+                  "desc": "Foundations, two core modules and a mini-project",
+                  "weight": 33
+                },
+                {
+                  "name": "14 days",
+                  "desc": "Core modules and a partner project",
+                  "weight": 47
+                },
+                {
+                  "name": "21 days",
+                  "desc": "Core modules, a partner project and one specialisation",
+                  "weight": 70
+                },
+                {
+                  "name": "30 days",
+                  "desc": "The full curriculum, an end-to-end partner project and one specialisation",
+                  "weight": 100
+                }
+              ],
+              "modesTitle": "Three ways to join",
+              "modes": [
+                {
+                  "title": "On campus",
+                  "desc": "We run it at your college."
+                },
+                {
+                  "title": "Hybrid",
+                  "desc": "Part on campus, part online."
+                },
+                {
+                  "title": "Online",
+                  "desc": "Join live from anywhere."
+                }
+              ],
+              "stepsTitle": "The roadmap: four stages, whatever your plan length.",
+              "steps": [
+                {
+                  "title": "Onboard",
+                  "desc": "Meet your mentor, set up your tools and get your project brief."
+                },
+                {
+                  "title": "Learn",
+                  "desc": "Focused skill sprints on the track's core modules."
+                },
+                {
+                  "title": "Build",
+                  "desc": "Work on a live partner project, with daily reviews."
+                },
+                {
+                  "title": "Showcase",
+                  "desc": "Present what you built on the final day and get feedback."
+                }
+              ]
+            },
+            {
+              "id": "outcomes-9",
+              "type": "cards",
+              "label": "Certificate & outcomes",
+              "title": "Leave with proof, not just a certificate.",
+              "lead": "",
+              "columns": 4,
+              "numbered": true,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Co-branded internship certificate",
+                  "desc": "Issued by Edutou together with your industry partner."
+                },
+                {
+                  "title": "A portfolio that speaks for you",
+                  "desc": "Your project code, docs and demo on GitHub."
+                },
+                {
+                  "title": "Real industry experience",
+                  "desc": "Daily work on a partner brief, reviewed by mentors."
+                },
+                {
+                  "title": "Final-day showcase",
+                  "desc": "Present your work and get feedback from the team."
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "institutions-10",
+              "type": "cards",
+              "label": "For institutions",
+              "title": "Bring industry internships to your campus.",
+              "lead": "Edutou runs the whole programme for your students, from the first day to the final showcase.",
+              "columns": 4,
+              "numbered": true,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Choose the format",
+                  "desc": "On campus, hybrid or online."
+                },
+                {
+                  "title": "Choose the length",
+                  "desc": "7, 10, 14, 21 or 30 days, scheduled around your academic calendar."
+                },
+                {
+                  "title": "We bring",
+                  "desc": "Trainers, partner projects, tools and certificates."
+                },
+                {
+                  "title": "Open to all",
+                  "desc": "Students from every department can join."
+                }
+              ],
+              "buttons": [
+                {
+                  "label": "Partner with us",
+                  "href": "mailto:info@edutou.in?subject=Institutional%20enquiry%3A%20Industry%20Internship%20%E2%80%93%20AI-Native%20Software%20Engineering"
+                },
+                {
+                  "label": "Institutions we've worked with",
+                  "href": "/about/partners"
+                }
+              ]
+            }
+          ],
+          "related": {
+            "enabled": true,
+            "label": "More industry internships",
+            "title": "Explore the other tracks."
+          },
+          "cta": {
+            "title": "Start any time. Admissions are open all year.",
+            "text": "Fees depend on the plan and certification you choose. Scholarships are available. Talk to our counsellor, Bewin Joel (+91 63853 15565), to find your plan and fee."
+          }
+        }
+      }
+    },
+    {
+      "slug": "electronics-technology",
+      "status": "published",
+      "sortOrder": 20,
+      "data": {
+        "title": "Industry Internship: Electronics Technology",
+        "category": "courses",
+        "alsoIn": [
+          "internship-programmes"
+        ],
+        "domains": [
+          "ECE",
+          "EEE",
+          "VLSI",
+          "PCB"
+        ],
+        "type": "Internship",
+        "pricing": {
+          "model": "paid",
+          "amount": null,
+          "currency": "INR",
+          "note": "Fees depend on the plan"
+        },
+        "payment": {
+          "collectOnline": false,
+          "provider": "",
+          "productRef": ""
+        },
+        "schedule": {
+          "startDate": "",
+          "time": "",
+          "duration": "",
+          "mode": "",
+          "language": "",
+          "seats": null
+        },
+        "image": {
+          "url": "/internships/electronics-technology.jpg",
+          "alt": "An ESP32-S3 circuit board design, ready for fabrication",
+          "focus": "50% 55%"
+        },
+        "card": {
+          "meta": [
+            "7, 10, 14, 21 or 30 days · full-time",
+            "On campus, hybrid or online",
+            "Open to all departments"
+          ],
+          "summary": "Design, build and test real electronics, from schematic to a working connected product: PCB, EDA, VLSI, embedded and IoT, on real partner hardware with 3 industry partners.",
+          "highlights": [
+            "Electronics design basics",
+            "PCB design with EDA tools",
+            "Embedded firmware",
+            "IoT systems",
+            "VLSI & digital design",
+            "Prototyping & fabrication",
+            "Test, debug & bring-up",
+            "Electronics for robotics"
+          ],
+          "tools": [
+            "KiCad",
+            "Altium Designer",
+            "EasyEDA",
+            "LTspice",
+            "PlatformIO",
+            "ESP-IDF",
+            "STM32CubeIDE",
+            "Verilog",
+            "Vivado",
+            "ModelSim",
+            "MQTT",
+            "Fusion 360",
+            "Oscilloscope",
+            "Logic analyser"
+          ],
+          "details": {
+            "enabled": true,
+            "roles": [
+              "PCB design engineer",
+              "Embedded firmware engineer",
+              "IoT engineer",
+              "VLSI / RTL design engineer",
+              "Hardware test & validation engineer",
+              "Electronics product engineer"
+            ],
+            "projects": [
+              "Design a 2-layer ESP32 IoT controller board, from schematic to Gerbers",
+              "Industrial IoT sensor node that streams readings to a live dashboard",
+              "CanSat-style telemetry board that logs and sends flight data",
+              "Design a UART controller in Verilog, simulate it and run it on an FPGA",
+              "Connected device prototype: PCB, firmware and a 3D-printed enclosure",
+              "Battery-monitoring and sensor-interface board for a mobile robot"
+            ],
+            "note": "Every plan runs in four stages: onboard, learn, build on a live partner project, and showcase on the final day. You leave with a co-branded Edutou + industry partner certificate and a GitHub portfolio. Fees depend on the plan; scholarships are available."
+          }
+        },
+        "page": {
+          "enabled": true,
+          "eyebrow": "Industry Internship Programme",
+          "tagline": "Design, build and test real electronics, from schematic to a working connected product.",
+          "topics": [
+            "PCB",
+            "EDA",
+            "VLSI",
+            "Embedded",
+            "IoT"
+          ],
+          "facts": [
+            {
+              "value": "7–30 days",
+              "label": "Full-time plans"
+            },
+            {
+              "value": "3 modes",
+              "label": "On campus, hybrid or online"
+            },
+            {
+              "value": "All departments",
+              "label": "Engineering and arts & science"
+            },
+            {
+              "value": "Co-branded",
+              "label": "Edutou + partner certificate"
+            },
+            {
+              "value": "3 partners",
+              "label": "Industry collaborators"
+            }
+          ],
+          "primaryButton": "Enquire / Enrol",
+          "counsellor": {
+            "name": "Bewin Joel",
+            "phone": "+91 63853 15565"
+          },
+          "blocks": [
+            {
+              "id": "why-11",
+              "type": "text_media",
+              "label": "Why this track, why now",
+              "title": "India is making its own electronics. It needs engineers who can build them.",
+              "lead": "",
+              "paragraphs": [
+                "Companies across India now design and make hardware here, from circuit boards to connected devices and chips. They need engineers who can take a design off the screen and make it work on the bench.",
+                "This internship gives you that bench time on real partner hardware. You design it, build it, test it and fix it."
+              ],
+              "stat": {
+                "prefix": "",
+                "value": "₹13.11 lakh crore",
+                "label": "of electronics produced in India in 2025–26, up 15.8% in one year.",
+                "source": "Ministry of Electronics & IT, Lok Sabha reply, July 2026"
+              },
+              "image": {
+                "url": "/internships/electronics-technology.jpg",
+                "alt": "An ESP32-S3 circuit board design, ready for fabrication",
+                "focus": "50% 55%"
+              }
+            },
+            {
+              "id": "roles-12",
+              "type": "cards",
+              "label": "Roles you can grow into",
+              "title": "Where this track can take you.",
+              "lead": "Six roles this track prepares you to grow into.",
+              "columns": 3,
+              "numbered": true,
+              "numberPrefix": "Role ",
+              "items": [
+                {
+                  "title": "PCB design engineer",
+                  "desc": ""
+                },
+                {
+                  "title": "Embedded firmware engineer",
+                  "desc": ""
+                },
+                {
+                  "title": "IoT engineer",
+                  "desc": ""
+                },
+                {
+                  "title": "VLSI / RTL design engineer",
+                  "desc": ""
+                },
+                {
+                  "title": "Hardware test & validation engineer",
+                  "desc": ""
+                },
+                {
+                  "title": "Electronics product engineer",
+                  "desc": ""
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "audience-13",
+              "type": "split_list",
+              "label": "Who it's for",
+              "title": "Open to every department.",
+              "lead": "",
+              "body": "Engineering or arts & science, any year. If you want to build real hardware, this track is for you.",
+              "noteLabel": "Helpful, not required",
+              "note": "Basic circuits or any programming language.",
+              "listTitle": "What you walk away with",
+              "list": [
+                "A circuit board you designed, built and brought up",
+                "Firmware and design files on GitHub",
+                "A documented, working prototype",
+                "A co-branded internship certificate from Edutou and your industry partner"
+              ]
+            },
+            {
+              "id": "partners-14",
+              "type": "cards",
+              "label": "Industry partners",
+              "title": "Work with teams building real hardware.",
+              "lead": "Every project comes from a partner doing this work today.",
+              "columns": 3,
+              "numbered": false,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Qbitio",
+                  "desc": "Design PCBs, write embedded firmware, build IoT controllers and work on VLSI design with a Chennai hardware team."
+                },
+                {
+                  "title": "Transista Technologies",
+                  "desc": "Prototype connected devices with 3D printing, IoT systems and robotics."
+                },
+                {
+                  "title": "Corelyn Robotics",
+                  "desc": "Build power, sensor and interface electronics for autonomous mobile robots."
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "modules-15",
+              "type": "cards",
+              "label": "What you'll learn",
+              "title": "Eight modules. From schematic to working product.",
+              "lead": "The modules you cover depend on your plan length.",
+              "columns": 4,
+              "numbered": true,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Electronics design basics",
+                  "desc": "Read datasheets, pick components and draw clean schematics."
+                },
+                {
+                  "title": "PCB design with EDA tools",
+                  "desc": "Lay out boards in KiCad or Altium, run manufacturing checks and export Gerbers."
+                },
+                {
+                  "title": "Embedded firmware",
+                  "desc": "Program ESP32 and STM32 boards in C and C++."
+                },
+                {
+                  "title": "IoT systems",
+                  "desc": "Connect sensors to the cloud with MQTT and live dashboards."
+                },
+                {
+                  "title": "VLSI & digital design",
+                  "desc": "Write Verilog, simulate it and run it on an FPGA."
+                },
+                {
+                  "title": "Prototyping & fabrication",
+                  "desc": "Assemble boards and 3D-print enclosures."
+                },
+                {
+                  "title": "Test, debug & bring-up",
+                  "desc": "Use an oscilloscope and logic analyser to get boards working."
+                },
+                {
+                  "title": "Electronics for robotics",
+                  "desc": "Motor drivers, sensor interfaces and battery monitoring."
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "toolkit-16",
+              "type": "tag_groups",
+              "label": "Your toolkit",
+              "title": "Work with the tools teams use today.",
+              "lead": "Grouped the way you'll use them on live projects.",
+              "groups": [
+                {
+                  "name": "EDA",
+                  "items": [
+                    "KiCad",
+                    "Altium Designer",
+                    "EasyEDA",
+                    "LTspice"
+                  ]
+                },
+                {
+                  "name": "Firmware",
+                  "items": [
+                    "Arduino IDE",
+                    "PlatformIO",
+                    "ESP-IDF",
+                    "STM32CubeIDE"
+                  ]
+                },
+                {
+                  "name": "VLSI",
+                  "items": [
+                    "Verilog",
+                    "Vivado",
+                    "ModelSim"
+                  ]
+                },
+                {
+                  "name": "IoT",
+                  "items": [
+                    "MQTT"
+                  ]
+                },
+                {
+                  "name": "Prototyping",
+                  "items": [
+                    "Fusion 360",
+                    "3D printer"
+                  ]
+                },
+                {
+                  "name": "Lab",
+                  "items": [
+                    "Oscilloscope",
+                    "Logic analyser"
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "projects-17",
+              "type": "cards",
+              "label": "Live projects",
+              "title": "Real boards. Real teams. Real products.",
+              "lead": "Sample projects. Final briefs come from partners and depend on your plan.",
+              "columns": 3,
+              "numbered": true,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Design a 2-layer ESP32 IoT controller board, from schematic to Gerbers",
+                  "desc": ""
+                },
+                {
+                  "title": "Industrial IoT sensor node that streams readings to a live dashboard",
+                  "desc": ""
+                },
+                {
+                  "title": "CanSat-style telemetry board that logs and sends flight data",
+                  "desc": ""
+                },
+                {
+                  "title": "Design a UART controller in Verilog, simulate it and run it on an FPGA",
+                  "desc": ""
+                },
+                {
+                  "title": "Connected device prototype: PCB, firmware and a 3D-printed enclosure",
+                  "desc": ""
+                },
+                {
+                  "title": "Battery-monitoring and sensor-interface board for a mobile robot",
+                  "desc": ""
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "plans-18",
+              "type": "plans",
+              "label": "How the internship runs",
+              "title": "Pick your plan. Work a full industry day, every day.",
+              "lead": "Every plan is full-time. Longer plans go deeper.",
+              "plansTitle": "Choose your plan",
+              "plans": [
+                {
+                  "name": "7 days",
+                  "desc": "Core foundations and a guided mini-project",
+                  "weight": 23
+                },
+                {
+                  "name": "10 days",
+                  "desc": "Foundations, two core modules and a mini-project",
+                  "weight": 33
+                },
+                {
+                  "name": "14 days",
+                  "desc": "Core modules and a partner project",
+                  "weight": 47
+                },
+                {
+                  "name": "21 days",
+                  "desc": "Core modules, a partner project and one specialisation",
+                  "weight": 70
+                },
+                {
+                  "name": "30 days",
+                  "desc": "The full curriculum, an end-to-end partner project and one specialisation",
+                  "weight": 100
+                }
+              ],
+              "modesTitle": "Three ways to join",
+              "modes": [
+                {
+                  "title": "On campus",
+                  "desc": "We run it at your college."
+                },
+                {
+                  "title": "Hybrid",
+                  "desc": "Part on campus, part online."
+                },
+                {
+                  "title": "Online",
+                  "desc": "Join live from anywhere."
+                }
+              ],
+              "stepsTitle": "The roadmap: four stages, whatever your plan length.",
+              "steps": [
+                {
+                  "title": "Onboard",
+                  "desc": "Meet your mentor, set up your tools and get your project brief."
+                },
+                {
+                  "title": "Learn",
+                  "desc": "Focused skill sprints on the track's core modules."
+                },
+                {
+                  "title": "Build",
+                  "desc": "Work on a live partner project, with daily reviews."
+                },
+                {
+                  "title": "Showcase",
+                  "desc": "Present what you built on the final day and get feedback."
+                }
+              ]
+            },
+            {
+              "id": "outcomes-19",
+              "type": "cards",
+              "label": "Certificate & outcomes",
+              "title": "Leave with proof, not just a certificate.",
+              "lead": "",
+              "columns": 4,
+              "numbered": true,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Co-branded internship certificate",
+                  "desc": "Issued by Edutou together with your industry partner."
+                },
+                {
+                  "title": "A portfolio that speaks for you",
+                  "desc": "Your board files, firmware and test reports on GitHub."
+                },
+                {
+                  "title": "Real industry experience",
+                  "desc": "Daily work on a partner brief, reviewed by mentors."
+                },
+                {
+                  "title": "Final-day showcase",
+                  "desc": "Present your work and get feedback from the team."
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "institutions-20",
+              "type": "cards",
+              "label": "For institutions",
+              "title": "Bring industry internships to your campus.",
+              "lead": "Edutou runs the whole programme for your students, from the first day to the final showcase.",
+              "columns": 4,
+              "numbered": true,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Choose the format",
+                  "desc": "On campus, hybrid or online."
+                },
+                {
+                  "title": "Choose the length",
+                  "desc": "7, 10, 14, 21 or 30 days, scheduled around your academic calendar."
+                },
+                {
+                  "title": "We bring",
+                  "desc": "Trainers, partner projects, tools and certificates."
+                },
+                {
+                  "title": "Open to all",
+                  "desc": "Students from every department can join."
+                }
+              ],
+              "buttons": [
+                {
+                  "label": "Partner with us",
+                  "href": "mailto:info@edutou.in?subject=Institutional%20enquiry%3A%20Industry%20Internship%20%E2%80%93%20Electronics%20Technology"
+                },
+                {
+                  "label": "Institutions we've worked with",
+                  "href": "/about/partners"
+                }
+              ]
+            }
+          ],
+          "related": {
+            "enabled": true,
+            "label": "More industry internships",
+            "title": "Explore the other tracks."
+          },
+          "cta": {
+            "title": "Start any time. Admissions are open all year.",
+            "text": "Fees depend on the plan and certification you choose. Scholarships are available. Talk to our counsellor, Bewin Joel (+91 63853 15565), to find your plan and fee."
+          }
+        }
+      }
+    },
+    {
+      "slug": "robotics-autonomous-technologies",
+      "status": "published",
+      "sortOrder": 30,
+      "data": {
+        "title": "Industry Internship: Robotics & Autonomous Technologies",
+        "category": "courses",
+        "alsoIn": [
+          "internship-programmes"
+        ],
+        "domains": [
+          "Robotics",
+          "AMR",
+          "Drone"
+        ],
+        "type": "Internship",
+        "pricing": {
+          "model": "paid",
+          "amount": null,
+          "currency": "INR",
+          "note": "Fees depend on the plan"
+        },
+        "payment": {
+          "collectOnline": false,
+          "provider": "",
+          "productRef": ""
+        },
+        "schedule": {
+          "startDate": "",
+          "time": "",
+          "duration": "",
+          "mode": "",
+          "language": "",
+          "seats": null
+        },
+        "image": {
+          "url": "/internships/robotics-autonomous.jpg",
+          "alt": "An autonomous mobile robot built by Corelyn Robotics",
+          "focus": "30% 78%"
+        },
+        "card": {
+          "meta": [
+            "7, 10, 14, 21 or 30 days · full-time",
+            "On campus, hybrid or online",
+            "Open to all departments"
+          ],
+          "summary": "Build robots that see, map and move on their own, with teams deploying them today. Work with Corelyn Robotics, Qbitio and ACETECH on robotics, AMRs and drones.",
+          "highlights": [
+            "Robot fundamentals",
+            "Mechanical design & fabrication",
+            "Robot electronics & control",
+            "ROS 2 & simulation",
+            "Perception & SLAM",
+            "Navigation & fleet operations",
+            "Drones",
+            "Industrial automation"
+          ],
+          "tools": [
+            "ROS 2",
+            "Gazebo",
+            "RViz",
+            "Nav2",
+            "Python",
+            "C++",
+            "OpenCV",
+            "LiDAR SLAM",
+            "Arduino",
+            "ESP32",
+            "STM32",
+            "Fusion 360",
+            "SolidWorks",
+            "PX4",
+            "ArduPilot",
+            "QGroundControl",
+            "PLC"
+          ],
+          "details": {
+            "enabled": true,
+            "roles": [
+              "Robotics software engineer (ROS 2)",
+              "Autonomy & navigation engineer",
+              "Robot hardware & integration engineer",
+              "Drone engineer",
+              "Automation engineer",
+              "Field robotics engineer"
+            ],
+            "projects": [
+              "Map a warehouse floor with LiDAR SLAM and run autonomous pick-and-drop routes",
+              "Test obstacle-aware re-routing and report fleet metrics",
+              "Connect an AMR task queue to a warehouse management system",
+              "Motor-control and sensor board for a small mobile robot",
+              "Vision-based robot that sorts objects by colour or shape",
+              "Autonomous waypoint mission for a drone, simulated first",
+              "Automate one step of an assembly line"
+            ],
+            "note": "Every plan runs in four stages: onboard, learn, build on a live partner project, and showcase on the final day. You leave with a co-branded Edutou + industry partner certificate and a GitHub portfolio. Fees depend on the plan; scholarships are available."
+          }
+        },
+        "page": {
+          "enabled": true,
+          "eyebrow": "Industry Internship Programme",
+          "tagline": "Build robots that see, map and move on their own, with teams deploying them today.",
+          "topics": [
+            "Robotics",
+            "AMR",
+            "Drones"
+          ],
+          "facts": [
+            {
+              "value": "7–30 days",
+              "label": "Full-time plans"
+            },
+            {
+              "value": "3 modes",
+              "label": "On campus, hybrid or online"
+            },
+            {
+              "value": "All departments",
+              "label": "Engineering and arts & science"
+            },
+            {
+              "value": "Co-branded",
+              "label": "Edutou + partner certificate"
+            },
+            {
+              "value": "3 partners",
+              "label": "Industry collaborators"
+            }
+          ],
+          "primaryButton": "Enquire / Enrol",
+          "counsellor": {
+            "name": "Bewin Joel",
+            "phone": "+91 63853 15565"
+          },
+          "blocks": [
+            {
+              "id": "why-21",
+              "type": "text_media",
+              "label": "Why this track, why now",
+              "title": "India is putting robots to work. Learn to build them.",
+              "lead": "",
+              "paragraphs": [
+                "Factories and warehouses across India are adding robots fast, from fixed arms to autonomous mobile robots (AMRs) that find their own way. Building them takes engineers who combine mechanics, electronics and software.",
+                "This internship puts you on that work, with teams that build and deploy robots today."
+              ],
+              "stat": {
+                "prefix": "Almost",
+                "value": "10,500",
+                "label": "industrial robots installed in India in 2025, up 15%, sixth in the world.",
+                "source": "International Federation of Robotics, World Robotics 2026"
+              },
+              "image": {
+                "url": "/internships/robotics-autonomous.jpg",
+                "alt": "An autonomous mobile robot built by Corelyn Robotics",
+                "focus": "30% 78%"
+              }
+            },
+            {
+              "id": "roles-22",
+              "type": "cards",
+              "label": "Roles you can grow into",
+              "title": "Where this track can take you.",
+              "lead": "Six roles this track prepares you to grow into.",
+              "columns": 3,
+              "numbered": true,
+              "numberPrefix": "Role ",
+              "items": [
+                {
+                  "title": "Robotics software engineer (ROS 2)",
+                  "desc": ""
+                },
+                {
+                  "title": "Autonomy & navigation engineer",
+                  "desc": ""
+                },
+                {
+                  "title": "Robot hardware & integration engineer",
+                  "desc": ""
+                },
+                {
+                  "title": "Drone engineer",
+                  "desc": ""
+                },
+                {
+                  "title": "Automation engineer",
+                  "desc": ""
+                },
+                {
+                  "title": "Field robotics engineer",
+                  "desc": ""
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "audience-23",
+              "type": "split_list",
+              "label": "Who it's for",
+              "title": "Open to every department.",
+              "lead": "",
+              "body": "Engineering or arts & science, any year. If you want to build machines that move on their own, this track is for you.",
+              "noteLabel": "Helpful, not required",
+              "note": "Basic programming or basic electronics.",
+              "listTitle": "What you walk away with",
+              "list": [
+                "A robot or robot subsystem you built and tested",
+                "Code and designs on GitHub",
+                "A demo video of your robot in action",
+                "A co-branded internship certificate from Edutou and your industry partner"
+              ]
+            },
+            {
+              "id": "partners-24",
+              "type": "cards",
+              "label": "Industry partners",
+              "title": "Work with teams putting robots to work.",
+              "lead": "Every project comes from a partner doing this work today.",
+              "columns": 3,
+              "numbered": false,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Corelyn Robotics",
+                  "desc": "Map, navigate and deploy autonomous mobile robots that run in factories and warehouses."
+                },
+                {
+                  "title": "Qbitio",
+                  "desc": "Build robot controller boards, vision systems and drones."
+                },
+                {
+                  "title": "ACETECH",
+                  "desc": "Work on industrial automation and robotics in manufacturing."
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "modules-25",
+              "type": "cards",
+              "label": "What you'll learn",
+              "title": "Eight modules. From first motor to autonomous fleet.",
+              "lead": "The modules you cover depend on your plan length.",
+              "columns": 4,
+              "numbered": true,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Robot fundamentals",
+                  "desc": "Kinematics, actuators, sensors and safety."
+                },
+                {
+                  "title": "Mechanical design & fabrication",
+                  "desc": "Design in Fusion 360 or SolidWorks, then 3D-print and assemble."
+                },
+                {
+                  "title": "Robot electronics & control",
+                  "desc": "Microcontrollers, motor drivers, encoders and PID control."
+                },
+                {
+                  "title": "ROS 2 & simulation",
+                  "desc": "Build and test robots in Gazebo and RViz before touching hardware."
+                },
+                {
+                  "title": "Perception & SLAM",
+                  "desc": "Map spaces with LiDAR and cameras, and fuse sensor data."
+                },
+                {
+                  "title": "Navigation & fleet operations",
+                  "desc": "Plan paths, avoid obstacles and run robot fleets."
+                },
+                {
+                  "title": "Drones",
+                  "desc": "Flight controllers, PX4 and ArduPilot, and autonomous missions."
+                },
+                {
+                  "title": "Industrial automation",
+                  "desc": "PLC basics, conveyors and robot cells."
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "toolkit-26",
+              "type": "tag_groups",
+              "label": "Your toolkit",
+              "title": "Work with the tools teams use today.",
+              "lead": "Grouped the way you'll use them on live projects.",
+              "groups": [
+                {
+                  "name": "Robot software",
+                  "items": [
+                    "ROS 2",
+                    "Gazebo",
+                    "RViz",
+                    "Nav2"
+                  ]
+                },
+                {
+                  "name": "Code",
+                  "items": [
+                    "Python",
+                    "C++"
+                  ]
+                },
+                {
+                  "name": "Perception",
+                  "items": [
+                    "OpenCV",
+                    "LiDAR SLAM"
+                  ]
+                },
+                {
+                  "name": "Hardware",
+                  "items": [
+                    "Arduino",
+                    "ESP32",
+                    "STM32"
+                  ]
+                },
+                {
+                  "name": "Design",
+                  "items": [
+                    "Fusion 360",
+                    "SolidWorks",
+                    "3D printer"
+                  ]
+                },
+                {
+                  "name": "Drones",
+                  "items": [
+                    "PX4",
+                    "ArduPilot",
+                    "QGroundControl"
+                  ]
+                },
+                {
+                  "name": "Automation",
+                  "items": [
+                    "PLC"
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "projects-27",
+              "type": "cards",
+              "label": "Live projects",
+              "title": "Real robots. Real teams. Real deployments.",
+              "lead": "Sample projects. Final briefs come from partners and depend on your plan.",
+              "columns": 3,
+              "numbered": true,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Map a warehouse floor with LiDAR SLAM and run autonomous pick-and-drop routes",
+                  "desc": ""
+                },
+                {
+                  "title": "Test obstacle-aware re-routing and report fleet metrics",
+                  "desc": ""
+                },
+                {
+                  "title": "Connect an AMR task queue to a warehouse management system",
+                  "desc": ""
+                },
+                {
+                  "title": "Motor-control and sensor board for a small mobile robot",
+                  "desc": ""
+                },
+                {
+                  "title": "Vision-based robot that sorts objects by colour or shape",
+                  "desc": ""
+                },
+                {
+                  "title": "Autonomous waypoint mission for a drone, simulated first",
+                  "desc": ""
+                },
+                {
+                  "title": "Automate one step of an assembly line",
+                  "desc": ""
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "plans-28",
+              "type": "plans",
+              "label": "How the internship runs",
+              "title": "Pick your plan. Work a full industry day, every day.",
+              "lead": "Every plan is full-time. Longer plans go deeper.",
+              "plansTitle": "Choose your plan",
+              "plans": [
+                {
+                  "name": "7 days",
+                  "desc": "Core foundations and a guided mini-project",
+                  "weight": 23
+                },
+                {
+                  "name": "10 days",
+                  "desc": "Foundations, two core modules and a mini-project",
+                  "weight": 33
+                },
+                {
+                  "name": "14 days",
+                  "desc": "Core modules and a partner project",
+                  "weight": 47
+                },
+                {
+                  "name": "21 days",
+                  "desc": "Core modules, a partner project and one specialisation",
+                  "weight": 70
+                },
+                {
+                  "name": "30 days",
+                  "desc": "The full curriculum, an end-to-end partner project and one specialisation",
+                  "weight": 100
+                }
+              ],
+              "modesTitle": "Three ways to join",
+              "modes": [
+                {
+                  "title": "On campus",
+                  "desc": "We run it at your college."
+                },
+                {
+                  "title": "Hybrid",
+                  "desc": "Part on campus, part online."
+                },
+                {
+                  "title": "Online",
+                  "desc": "Join live from anywhere."
+                }
+              ],
+              "stepsTitle": "The roadmap: four stages, whatever your plan length.",
+              "steps": [
+                {
+                  "title": "Onboard",
+                  "desc": "Meet your mentor, set up your tools and get your project brief."
+                },
+                {
+                  "title": "Learn",
+                  "desc": "Focused skill sprints on the track's core modules."
+                },
+                {
+                  "title": "Build",
+                  "desc": "Work on a live partner project, with daily reviews."
+                },
+                {
+                  "title": "Showcase",
+                  "desc": "Present what you built on the final day and get feedback."
+                }
+              ]
+            },
+            {
+              "id": "outcomes-29",
+              "type": "cards",
+              "label": "Certificate & outcomes",
+              "title": "Leave with proof, not just a certificate.",
+              "lead": "",
+              "columns": 4,
+              "numbered": true,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Co-branded internship certificate",
+                  "desc": "Issued by Edutou together with your industry partner."
+                },
+                {
+                  "title": "A portfolio that speaks for you",
+                  "desc": "Your code, CAD designs and a demo video on GitHub."
+                },
+                {
+                  "title": "Real industry experience",
+                  "desc": "Daily work on a partner brief, reviewed by mentors."
+                },
+                {
+                  "title": "Final-day showcase",
+                  "desc": "Present your work and get feedback from the team."
+                }
+              ],
+              "buttons": []
+            },
+            {
+              "id": "institutions-30",
+              "type": "cards",
+              "label": "For institutions",
+              "title": "Bring industry internships to your campus.",
+              "lead": "Edutou runs the whole programme for your students, from the first day to the final showcase.",
+              "columns": 4,
+              "numbered": true,
+              "numberPrefix": "",
+              "items": [
+                {
+                  "title": "Choose the format",
+                  "desc": "On campus, hybrid or online."
+                },
+                {
+                  "title": "Choose the length",
+                  "desc": "7, 10, 14, 21 or 30 days, scheduled around your academic calendar."
+                },
+                {
+                  "title": "We bring",
+                  "desc": "Trainers, partner projects, tools and certificates."
+                },
+                {
+                  "title": "Open to all",
+                  "desc": "Students from every department can join."
+                }
+              ],
+              "buttons": [
+                {
+                  "label": "Partner with us",
+                  "href": "mailto:info@edutou.in?subject=Institutional%20enquiry%3A%20Industry%20Internship%20%E2%80%93%20Robotics%20%26%20Autonomous%20Technologies"
+                },
+                {
+                  "label": "Institutions we've worked with",
+                  "href": "/about/partners"
+                }
+              ]
+            }
+          ],
+          "related": {
+            "enabled": true,
+            "label": "More industry internships",
+            "title": "Explore the other tracks."
+          },
+          "cta": {
+            "title": "Start any time. Admissions are open all year.",
+            "text": "Fees depend on the plan and certification you choose. Scholarships are available. Talk to our counsellor, Bewin Joel (+91 63853 15565), to find your plan and fee."
+          }
+        }
+      }
+    },
+    {
+      "slug": "bootup-vibe-coding",
+      "status": "published",
+      "sortOrder": 40,
+      "data": {
+        "title": "BootUp: 3-Day Vibe Coding Bootcamp",
+        "category": "bootcamps",
+        "alsoIn": [],
+        "domains": [
+          "AI",
+          "CSE"
+        ],
+        "type": "Bootcamp",
+        "pricing": {
+          "model": "hidden",
+          "amount": null,
+          "currency": "INR",
+          "note": ""
+        },
+        "payment": {
+          "collectOnline": false,
+          "provider": "",
+          "productRef": ""
+        },
+        "schedule": {
+          "startDate": "",
+          "time": "",
+          "duration": "",
+          "mode": "",
+          "language": "",
+          "seats": null
+        },
+        "image": {
+          "url": "",
+          "alt": "",
+          "focus": ""
+        },
+        "card": {
+          "meta": [
+            "3 days",
+            "For first-year engineering students"
+          ],
+          "summary": "A high-impact bootcamp that gives students their first taste of software development: build real applications with AI tools and a visual-first approach, even if you have never coded before.",
+          "highlights": [
+            "Think Like a Builder",
+            "Logic Over Luck: Decode Prompting",
+            "From Prototype to Production",
+            "The Art of the Demo: Deploy or Die"
+          ],
+          "tools": [
+            "Cursor",
+            "Lovable",
+            "Emergent"
+          ],
+          "details": {
+            "enabled": false,
+            "roles": [],
+            "projects": [],
+            "note": ""
+          }
+        },
+        "page": {
+          "enabled": false
+        }
+      }
+    },
+    {
+      "slug": "data-science-gen-ai",
+      "status": "published",
+      "sortOrder": 50,
+      "data": {
+        "title": "Advanced Data Science & Generative AI",
+        "category": "courses",
+        "alsoIn": [],
+        "domains": [
+          "AI",
+          "CSE"
+        ],
+        "type": "Course",
+        "pricing": {
+          "model": "hidden",
+          "amount": null,
+          "currency": "INR",
+          "note": ""
+        },
+        "payment": {
+          "collectOnline": false,
+          "provider": "",
+          "productRef": ""
+        },
+        "schedule": {
+          "startDate": "",
+          "time": "",
+          "duration": "",
+          "mode": "",
+          "language": "",
+          "seats": null
+        },
+        "image": {
+          "url": "",
+          "alt": "",
+          "focus": ""
+        },
+        "card": {
+          "meta": [
+            "6 months",
+            "120+ learning hours",
+            "Live sessions"
+          ],
+          "summary": "Go from data foundations to building and deploying intelligent, real-world AI solutions, with end-to-end project work.",
+          "highlights": [
+            "Python, SQL & data handling",
+            "Statistics, machine learning & deep learning",
+            "NLP, LLMs, RAG & AI agents",
+            "MLOps & cloud deployment"
+          ],
+          "tools": [],
+          "details": {
+            "enabled": false,
+            "roles": [],
+            "projects": [],
+            "note": ""
+          }
+        },
+        "page": {
+          "enabled": false
+        }
+      }
+    }
+  ]
+}

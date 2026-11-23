@@ -170,6 +170,16 @@ const EnvSchema = z.object({
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(8).optional(),
   BOOTSTRAP_ADMIN_NAME: z.string().max(200).optional(),
+  /**
+   * "true" also (re)sets the password of BOOTSTRAP_ADMIN_EMAIL on every start,
+   * even when admins already exist -- for taking over an existing admin account
+   * on deploy. Turn it off after the first successful sign-in, or every restart
+   * puts the password back to this value.
+   */
+  BOOTSTRAP_ADMIN_RESET: z
+    .string()
+    .optional()
+    .transform((v) => ['true', '1', 'yes'].includes((v ?? '').trim().toLowerCase())),
 
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),

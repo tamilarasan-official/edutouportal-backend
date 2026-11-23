@@ -38,6 +38,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
 # Migrations are read at runtime, not compiled, so they must be copied verbatim.
 COPY migrations ./migrations
+COPY seeds ./seeds
 
 # Run unprivileged. `node` (uid 1000) already exists in the base image.
 # The uploads volume is chowned so the container can write to it.

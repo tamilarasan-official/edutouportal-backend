@@ -14,6 +14,8 @@
     "storage:migrate": "tsx src/scripts/storage-migrate.ts",
     "storage:repair": "tsx src/scripts/storage-repair.ts",
     "sync-mentors": "tsx src/scripts/sync-mentors.ts",
+    "cms:import": "tsx src/scripts/cms-import.ts",
+    "cms:import:prod": "node dist/scripts/cms-import.js",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test --test-concurrency=1 tests/*.test.ts"
   },

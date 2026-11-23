@@ -1,0 +1,629 @@
+import { Router, type NextFunction, type Request, type Response } from 'express'
+import rateLimit from 'express-rate-limit'
+import { z } from 'zod'
+import { config } from '../config.js'
+import { query, queryOne } from '../db/pool.js'
+import { requireRole } from '../middleware/auth.js'
+import {
+  categoryInputSchema,
+  programmeDataSchema,
+  programmeInputSchema,
+  programmeStatus,
+  settingsDefaults,
+  settingsSchemas,
+  type ProgrammeData,
+  type SettingsKey,
+} from './schema.js'
+
+/**
+ * CMS for the public website (edutou.in), managed from admin.edutou.in.
+ *
+ * Public
+ *   GET  /api/cms/site                 everything the website renders, published only
+ *   POST /api/cms/enrol                enrolment form on edutou.in/enroll
+ *
+ * Admin (role: admin)
+ *   /api/cms/admin/programmes          list, create, read, update, delete, duplicate
+ *   /api/cms/admin/categories          list, create, update, delete
+ *   /api/cms/admin/settings/:key       domains, enrol_form
+ *   /api/cms/admin/enrolments          list, summary, update, mark seen, delete
+ */
+export const cmsRouter = Router()
+
+const wrap =
+  (fn: (req: Request, res: Response) => Promise<void>) =>
+  (req: Request, res: Response, next: NextFunction) => {
+    fn(req, res).catch(next)
+  }
+
+const admin = requireRole('admin')
+
+function validationError(res: Response, error: z.ZodError) {
+  res.status(422).json({
+    error: {
+      message: 'Some fields are invalid',
+      code: 'VALIDATION',
+      details: error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Loaders
+// ---------------------------------------------------------------------------
+
+interface ProgrammeRow {
+  id: string
+  slug: string
+  status: string
+  sort_order: number
+  data: unknown
+  published_at: Date | null
+  created_at: Date
+  updated_at: Date
+}
+
+function shapeProgramme(row: ProgrammeRow) {
+  // Re-parse so documents saved before a field existed come back with its default.
+  const parsed = programmeDataSchema.safeParse(row.data)
+  return {
+    id: row.id,
+    slug: row.slug,
+    status: row.status,
+    sortOrder: row.sort_order,
+    publishedAt: row.published_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    data: parsed.success ? parsed.data : (row.data as ProgrammeData),
+  }
+}
+
+async function loadCategories() {
+  const rows = await query<{ id: string; title: string; description: string; sort_order: number }>(
+    'SELECT id, title, description, sort_order FROM cms_categories ORDER BY sort_order, title'
+  )
+  return rows.map((r, i) => ({
+    id: r.id,
+    title: r.title,
+    description: r.description,
+    sortOrder: r.sort_order,
+    no: String(i + 1).padStart(2, '0'),
+  }))
+}
+
+async function loadSetting<K extends SettingsKey>(key: K): Promise<z.infer<(typeof settingsSchemas)[K]>> {
+  const row = await queryOne<{ value: unknown }>('SELECT value FROM cms_settings WHERE key = $1', [key])
+  if (!row) return settingsDefaults[key] as z.infer<(typeof settingsSchemas)[K]>
+  const parsed = settingsSchemas[key].safeParse(row.value)
+  return (parsed.success ? parsed.data : settingsDefaults[key]) as z.infer<(typeof settingsSchemas)[K]>
+}
+
+async function assertCategoriesExist(data: ProgrammeData): Promise<string | null> {
+  const ids = [data.category, ...data.alsoIn]
+  const rows = await query<{ id: string }>('SELECT id FROM cms_categories WHERE id = ANY($1)', [ids])
+  const known = new Set(rows.map((r) => r.id))
+  const missing = ids.filter((id) => !known.has(id))
+  return missing.length ? `Unknown category: ${missing.join(', ')}` : null
+}
+
+// ---------------------------------------------------------------------------
+// Public: website content
+// ---------------------------------------------------------------------------
+
+cmsRouter.get(
+  '/site',
+  wrap(async (_req, res) => {
+    const [categories, domains, enrolForm, rows] = await Promise.all([
+      loadCategories(),
+      loadSetting('domains'),
+      loadSetting('enrol_form'),
+      query<ProgrammeRow>(
+        `SELECT id, slug, status, sort_order, data, published_at, created_at, updated_at
+           FROM cms_programmes WHERE status = 'published'
+          ORDER BY sort_order, published_at DESC NULLS LAST`
+      ),
+    ])
+    const programmes = rows.map(shapeProgramme).map(({ id, slug, sortOrder, data }) => ({ id, slug, sortOrder, data }))
+    res.setHeader('Cache-Control', 'public, max-age=15')
+    res.json({ data: { categories, domains: domains.items, enrolForm, programmes } })
+  })
+)
+
+// ---------------------------------------------------------------------------
+// Public: enrolment
+// ---------------------------------------------------------------------------
+
+const enrolLimiter =
+  config.NODE_ENV === 'test'
+    ? (_req: Request, _res: Response, next: () => void) => next()
+    : rateLimit({
+        windowMs: 10 * 60 * 1000,
+        limit: 10,
+        standardHeaders: 'draft-7',
+        legacyHeaders: false,
+        message: { error: { message: 'Too many attempts, please try again in a few minutes.', code: 'RATE_LIMITED' } },
+      })
+
+const clean = (max: number) => z.string().transform((v) => v.trim().replace(/\s+/g, ' ').slice(0, max))
+
+const enrolSchema = z.object({
+  programme: z.string().trim().max(80).optional().default(''),
+  name: clean(80).pipe(z.string().min(2, 'Please enter your name.')),
+  email: clean(120)
+    .transform((v) => v.toLowerCase())
+    .pipe(z.string().regex(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/, 'Please enter a valid email.')),
+  // India only: 10 digits starting 6-9. A leading +91 / 91 / 0 and spaces are tolerated.
+  phone: z
+    .string()
+    .transform((v) => v.replace(/\D/g, '').replace(/^(91|0)(?=\d{10}$)/, ''))
+    .pipe(z.string().regex(/^[6-9]\d{9}$/, 'Please enter a valid 10-digit Indian mobile number.')),
+  profession: clean(40).pipe(z.string().min(1, 'Please select your profession.')),
+  city: clean(60).pipe(z.string().min(2, 'Please enter your city.')),
+  utm_source: clean(60).optional(),
+  utm_medium: clean(60).optional(),
+  utm_campaign: clean(80).optional(),
+})
+
+const DUPLICATE_EMAIL = 'This email is already enrolled for this programme.'
+const DUPLICATE_PHONE = 'This WhatsApp number is already enrolled for this programme.'
+
+cmsRouter.post(
+  '/enrol',
+  enrolLimiter,
+  wrap(async (req, res) => {
+    // Honeypot: hidden from people, filled by naive bots. Pretend success.
+    if (typeof req.body?.company === 'string' && req.body.company.trim() !== '') {
+      res.status(201).json({ data: { ok: true } })
+      return
+    }
+
+    const parsed = enrolSchema.safeParse(req.body ?? {})
+    if (!parsed.success) {
+      const errors: Record<string, string> = {}
+      for (const issue of parsed.error.issues) {
+        const field = String(issue.path[0] ?? 'form')
+        errors[field] ??=
+          issue.message.startsWith('Expected') || issue.message === 'Required' ? 'This field is required.' : issue.message
+      }
+      res.status(422).json({ error: { message: 'Please check the highlighted fields', code: 'VALIDATION', errors } })
+      return
+    }
+    const r = parsed.data
+
+    const form = await loadSetting('enrol_form')
+    if (!form.professions.includes(r.profession)) {
+      res.status(422).json({
+        error: { message: 'Please check the highlighted fields', code: 'VALIDATION', errors: { profession: 'Please select your profession.' } },
+      })
+      return
+    }
+
+    let programmeId: string | null = null
+    let programmeKey = 'general'
+    let programmeTitle = 'General enquiry'
+    let amount: number | null = null
+    let currency: string | null = null
+    let paymentStatus = 'not_required'
+
+    if (r.programme) {
+      const row = await queryOne<ProgrammeRow>(
+        "SELECT id, slug, status, sort_order, data, published_at, created_at, updated_at FROM cms_programmes WHERE slug = $1 AND status = 'published'",
+        [r.programme]
+      )
+      if (!row) {
+        res.status(422).json({
+          error: { message: 'That programme is not open for enrolment.', code: 'VALIDATION', errors: { programme: 'Please choose a programme from the list.' } },
+        })
+        return
+      }
+      const p = shapeProgramme(row)
+      programmeId = p.id
+      programmeKey = p.slug
+      programmeTitle = p.data.title
+      if (p.data.pricing.model === 'paid') {
+        amount = p.data.pricing.amount
+        currency = p.data.pricing.currency
+        paymentStatus = 'pending'
+      }
+    }
+
+    const whatsapp = `+91${r.phone}`
+
+    const clash = await queryOne<{ email_taken: boolean; phone_taken: boolean }>(
+      `SELECT bool_or(lower(email) = $2) AS email_taken, bool_or(whatsapp = $3) AS phone_taken
+         FROM enrolments WHERE programme_key = $1 AND (lower(email) = $2 OR whatsapp = $3)`,
+      [programmeKey, r.email, whatsapp]
+    )
+    if (clash?.email_taken || clash?.phone_taken) {
+      const errors: Record<string, string> = {}
+      if (clash.email_taken) errors.email = DUPLICATE_EMAIL
+      if (clash.phone_taken) errors.phone = DUPLICATE_PHONE
+      res.status(409).json({ error: { message: 'You are already enrolled for this programme.', code: 'ALREADY_ENROLLED', errors } })
+      return
+    }
+
+    try {
+      await query(
+        `INSERT INTO enrolments (programme_id, programme_key, programme_title, name, email, whatsapp, profession, city,
+                                 utm_source, utm_medium, utm_campaign, amount, currency, payment_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+        [
+          programmeId, programmeKey, programmeTitle, r.name, r.email, whatsapp, r.profession, r.city,
+          r.utm_source || null, r.utm_medium || null, r.utm_campaign || null, amount, currency, paymentStatus,
+        ]
+      )
+    } catch (err) {
+      const pg = err as { code?: string; constraint?: string }
+      if (pg.code === '23505') {
+        const errors =
+          pg.constraint === 'enrolments_programme_whatsapp_key' ? { phone: DUPLICATE_PHONE } : { email: DUPLICATE_EMAIL }
+        res.status(409).json({ error: { message: 'You are already enrolled for this programme.', code: 'ALREADY_ENROLLED', errors } })
+        return
+      }
+      throw err
+    }
+
+    res.status(201).json({ data: { ok: true, programme: programmeTitle } })
+  })
+)
+
+// ---------------------------------------------------------------------------
+// Admin: programmes
+// ---------------------------------------------------------------------------
+
+const PROGRAMME_COLUMNS = 'id, slug, status, sort_order, data, published_at, created_at, updated_at'
+
+cmsRouter.get(
+  '/admin/programmes',
+  admin,
+  wrap(async (_req, res) => {
+    const rows = await query<ProgrammeRow>(`SELECT ${PROGRAMME_COLUMNS} FROM cms_programmes ORDER BY sort_order, created_at`)
+    res.json({ data: rows.map(shapeProgramme) })
+  })
+)
+
+cmsRouter.get(
+  '/admin/programmes/:id',
+  admin,
+  wrap(async (req, res) => {
+    const row = await queryOne<ProgrammeRow>(`SELECT ${PROGRAMME_COLUMNS} FROM cms_programmes WHERE id::text = $1`, [req.params.id ?? ''])
+    if (!row) {
+      res.status(404).json({ error: { message: 'Programme not found', code: 'NOT_FOUND' } })
+      return
+    }
+    res.json({ data: shapeProgramme(row) })
+  })
+)
+
+async function saveProgramme(req: Request, res: Response, id: string | null) {
+  const parsed = programmeInputSchema.safeParse(req.body)
+  if (!parsed.success) return validationError(res, parsed.error)
+  const { slug, status, sortOrder, data } = parsed.data
+
+  const missing = await assertCategoriesExist(data)
+  if (missing) {
+    res.status(422).json({ error: { message: missing, code: 'VALIDATION', details: [{ path: 'data.category', message: missing }] } })
+    return
+  }
+
+  try {
+    const row = id
+      ? await queryOne<ProgrammeRow>(
+          `UPDATE cms_programmes
+              SET slug = $2, status = $3, sort_order = $4, data = $5, updated_at = now(), updated_by = $6,
+                  published_at = CASE WHEN $3 = 'published' THEN COALESCE(published_at, now()) ELSE published_at END
+            WHERE id::text = $1
+        RETURNING ${PROGRAMME_COLUMNS}`,
+          [id, slug, status, sortOrder, JSON.stringify(data), req.actor!.userId]
+        )
+      : await queryOne<ProgrammeRow>(
+          `INSERT INTO cms_programmes (slug, status, sort_order, data, updated_by, published_at)
+           VALUES ($1, $2, $3, $4, $5, CASE WHEN $2 = 'published' THEN now() END)
+        RETURNING ${PROGRAMME_COLUMNS}`,
+          [slug, status, sortOrder, JSON.stringify(data), req.actor!.userId]
+        )
+    if (!row) {
+      res.status(404).json({ error: { message: 'Programme not found', code: 'NOT_FOUND' } })
+      return
+    }
+    res.status(id ? 200 : 201).json({ data: shapeProgramme(row) })
+  } catch (err) {
+    if ((err as { code?: string }).code === '23505') {
+      res.status(409).json({
+        error: { message: `The web address "${slug}" is already used by another programme.`, code: 'SLUG_TAKEN', details: [{ path: 'slug', message: 'Already in use' }] },
+      })
+      return
+    }
+    throw err
+  }
+}
+
+cmsRouter.post('/admin/programmes', admin, wrap((req, res) => saveProgramme(req, res, null)))
+cmsRouter.put('/admin/programmes/:id', admin, wrap((req, res) => saveProgramme(req, res, req.params.id ?? '')))
+
+cmsRouter.patch(
+  '/admin/programmes/:id/status',
+  admin,
+  wrap(async (req, res) => {
+    const parsed = z.object({ status: programmeStatus }).safeParse(req.body)
+    if (!parsed.success) return validationError(res, parsed.error)
+    const row = await queryOne<ProgrammeRow>(
+      `UPDATE cms_programmes
+          SET status = $2, updated_at = now(), updated_by = $3,
+              published_at = CASE WHEN $2 = 'published' THEN COALESCE(published_at, now()) ELSE published_at END
+        WHERE id::text = $1 RETURNING ${PROGRAMME_COLUMNS}`,
+      [req.params.id ?? '', parsed.data.status, req.actor!.userId]
+    )
+    if (!row) {
+      res.status(404).json({ error: { message: 'Programme not found', code: 'NOT_FOUND' } })
+      return
+    }
+    res.json({ data: shapeProgramme(row) })
+  })
+)
+
+cmsRouter.post(
+  '/admin/programmes/:id/duplicate',
+  admin,
+  wrap(async (req, res) => {
+    const source = await queryOne<ProgrammeRow>(`SELECT ${PROGRAMME_COLUMNS} FROM cms_programmes WHERE id::text = $1`, [req.params.id ?? ''])
+    if (!source) {
+      res.status(404).json({ error: { message: 'Programme not found', code: 'NOT_FOUND' } })
+      return
+    }
+    const data = { ...shapeProgramme(source).data }
+    data.title = `${data.title} (copy)`.slice(0, 160)
+    let slug = `${source.slug}-copy`.slice(0, 80)
+    for (let n = 2; await queryOne('SELECT 1 FROM cms_programmes WHERE slug = $1', [slug]); n++) {
+      slug = `${source.slug}-copy-${n}`.slice(0, 80)
+    }
+    const row = await queryOne<ProgrammeRow>(
+      `INSERT INTO cms_programmes (slug, status, sort_order, data, updated_by)
+       VALUES ($1, 'draft', $2, $3, $4) RETURNING ${PROGRAMME_COLUMNS}`,
+      [slug, source.sort_order + 1, JSON.stringify(data), req.actor!.userId]
+    )
+    res.status(201).json({ data: shapeProgramme(row!) })
+  })
+)
+
+cmsRouter.delete(
+  '/admin/programmes/:id',
+  admin,
+  wrap(async (req, res) => {
+    await query('DELETE FROM cms_programmes WHERE id::text = $1', [req.params.id ?? ''])
+    res.json({ data: { success: true } })
+  })
+)
+
+// ---------------------------------------------------------------------------
+// Admin: categories
+// ---------------------------------------------------------------------------
+
+cmsRouter.get(
+  '/admin/categories',
+  admin,
+  wrap(async (_req, res) => {
+    const categories = await loadCategories()
+    const counts = await query<{ category: string; n: number }>(
+      `SELECT c.id AS category, count(p.id)::int AS n
+         FROM cms_categories c
+         LEFT JOIN cms_programmes p ON p.data->>'category' = c.id OR p.data->'alsoIn' ? c.id
+        GROUP BY c.id`
+    )
+    const byId = new Map(counts.map((c) => [c.category, c.n]))
+    res.json({ data: categories.map((c) => ({ ...c, programmes: byId.get(c.id) ?? 0 })) })
+  })
+)
+
+cmsRouter.post(
+  '/admin/categories',
+  admin,
+  wrap(async (req, res) => {
+    const parsed = categoryInputSchema.safeParse(req.body)
+    if (!parsed.success) return validationError(res, parsed.error)
+    const c = parsed.data
+    try {
+      await query('INSERT INTO cms_categories (id, title, description, sort_order) VALUES ($1, $2, $3, $4)', [
+        c.id, c.title, c.description, c.sortOrder,
+      ])
+    } catch (err) {
+      if ((err as { code?: string }).code === '23505') {
+        res.status(409).json({ error: { message: `Category "${c.id}" already exists.`, code: 'EXISTS' } })
+        return
+      }
+      throw err
+    }
+    res.status(201).json({ data: c })
+  })
+)
+
+cmsRouter.put(
+  '/admin/categories/:id',
+  admin,
+  wrap(async (req, res) => {
+    const parsed = categoryInputSchema.omit({ id: true }).safeParse(req.body)
+    if (!parsed.success) return validationError(res, parsed.error)
+    const c = parsed.data
+    const row = await queryOne(
+      'UPDATE cms_categories SET title = $2, description = $3, sort_order = $4, updated_at = now() WHERE id = $1 RETURNING id',
+      [req.params.id ?? '', c.title, c.description, c.sortOrder]
+    )
+    if (!row) {
+      res.status(404).json({ error: { message: 'Category not found', code: 'NOT_FOUND' } })
+      return
+    }
+    res.json({ data: { id: req.params.id, ...c } })
+  })
+)
+
+cmsRouter.delete(
+  '/admin/categories/:id',
+  admin,
+  wrap(async (req, res) => {
+    const inUse = await queryOne<{ n: number }>(
+      `SELECT count(*)::int AS n FROM cms_programmes WHERE data->>'category' = $1 OR data->'alsoIn' ? $1`,
+      [req.params.id ?? '']
+    )
+    if (inUse && inUse.n > 0) {
+      res.status(409).json({
+        error: { message: `${inUse.n} programme(s) still use this category. Move them first.`, code: 'IN_USE' },
+      })
+      return
+    }
+    await query('DELETE FROM cms_categories WHERE id = $1', [req.params.id ?? ''])
+    res.json({ data: { success: true } })
+  })
+)
+
+// ---------------------------------------------------------------------------
+// Admin: settings
+// ---------------------------------------------------------------------------
+
+const isSettingsKey = (k: string): k is SettingsKey => Object.prototype.hasOwnProperty.call(settingsSchemas, k)
+
+cmsRouter.get(
+  '/admin/settings/:key',
+  admin,
+  wrap(async (req, res) => {
+    const key = req.params.key ?? ''
+    if (!isSettingsKey(key)) {
+      res.status(404).json({ error: { message: 'Unknown setting', code: 'NOT_FOUND' } })
+      return
+    }
+    res.json({ data: await loadSetting(key) })
+  })
+)
+
+cmsRouter.put(
+  '/admin/settings/:key',
+  admin,
+  wrap(async (req, res) => {
+    const key = req.params.key ?? ''
+    if (!isSettingsKey(key)) {
+      res.status(404).json({ error: { message: 'Unknown setting', code: 'NOT_FOUND' } })
+      return
+    }
+    const parsed = settingsSchemas[key].safeParse(req.body)
+    if (!parsed.success) return validationError(res, parsed.error)
+    await query(
+      `INSERT INTO cms_settings (key, value, updated_at, updated_by) VALUES ($1, $2, now(), $3)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now(), updated_by = EXCLUDED.updated_by`,
+      [key, JSON.stringify(parsed.data), req.actor!.userId]
+    )
+    res.json({ data: parsed.data })
+  })
+)
+
+// ---------------------------------------------------------------------------
+// Admin: enrolments
+// ---------------------------------------------------------------------------
+
+const ENROLMENT_STATUSES = ['new', 'contacted', 'enrolled', 'not_interested'] as const
+const PAYMENT_STATUSES = ['not_required', 'pending', 'paid', 'failed', 'refunded'] as const
+
+cmsRouter.get(
+  '/admin/enrolments/summary',
+  admin,
+  wrap(async (_req, res) => {
+    const row = await queryOne<{ total: number; unseen: number; new: number; contacted: number; enrolled: number; not_interested: number }>(
+      `SELECT count(*)::int AS total,
+              count(*) FILTER (WHERE seen_at IS NULL)::int AS unseen,
+              count(*) FILTER (WHERE status = 'new')::int AS new,
+              count(*) FILTER (WHERE status = 'contacted')::int AS contacted,
+              count(*) FILTER (WHERE status = 'enrolled')::int AS enrolled,
+              count(*) FILTER (WHERE status = 'not_interested')::int AS not_interested
+         FROM enrolments`
+    )
+    res.json({ data: row })
+  })
+)
+
+cmsRouter.get(
+  '/admin/enrolments',
+  admin,
+  wrap(async (req, res) => {
+    const where: string[] = []
+    const params: unknown[] = []
+    const status = String(req.query.status ?? '')
+    if ((ENROLMENT_STATUSES as readonly string[]).includes(status)) {
+      params.push(status)
+      where.push(`status = $${params.length}`)
+    }
+    const programme = String(req.query.programme ?? '')
+    if (programme) {
+      params.push(programme)
+      where.push(`programme_key = $${params.length}`)
+    }
+    const q = String(req.query.q ?? '').trim()
+    if (q) {
+      params.push(`%${q.replace(/[%_\\]/g, (m) => `\\${m}`)}%`)
+      const p = `$${params.length}`
+      where.push(`(name ILIKE ${p} OR email ILIKE ${p} OR whatsapp ILIKE ${p} OR city ILIKE ${p})`)
+    }
+    const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 5000)
+    params.push(limit)
+    const rows = await query(
+      `SELECT id, programme_id, programme_key, programme_title, name, email, whatsapp, profession, city,
+              utm_source, utm_medium, utm_campaign, status, notes, seen_at, amount, currency,
+              payment_status, payment_provider, payment_reference, paid_at, created_at, updated_at
+         FROM enrolments ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+        ORDER BY created_at DESC LIMIT $${params.length}`,
+      params as never[]
+    )
+    res.json({ data: rows })
+  })
+)
+
+const enrolmentPatchSchema = z.object({
+  status: z.enum(ENROLMENT_STATUSES).optional(),
+  notes: z.string().max(4000).optional(),
+  paymentStatus: z.enum(PAYMENT_STATUSES).optional(),
+  paymentReference: z.string().trim().max(200).optional(),
+})
+
+cmsRouter.patch(
+  '/admin/enrolments/:id',
+  admin,
+  wrap(async (req, res) => {
+    const parsed = enrolmentPatchSchema.safeParse(req.body)
+    if (!parsed.success) return validationError(res, parsed.error)
+    const p = parsed.data
+    const row = await queryOne(
+      `UPDATE enrolments
+          SET status = COALESCE($2, status),
+              notes = COALESCE($3, notes),
+              payment_status = COALESCE($4, payment_status),
+              payment_reference = COALESCE($5, payment_reference),
+              paid_at = CASE WHEN $4 = 'paid' THEN COALESCE(paid_at, now()) ELSE paid_at END,
+              seen_at = COALESCE(seen_at, now()),
+              updated_at = now()
+        WHERE id::text = $1
+    RETURNING id`,
+      [req.params.id ?? '', p.status ?? null, p.notes ?? null, p.paymentStatus ?? null, p.paymentReference ?? null]
+    )
+    if (!row) {
+      res.status(404).json({ error: { message: 'Enrolment not found', code: 'NOT_FOUND' } })
+      return
+    }
+    res.json({ data: { success: true } })
+  })
+)
+
+cmsRouter.post(
+  '/admin/enrolments/mark-seen',
+  admin,
+  wrap(async (_req, res) => {
+    await query('UPDATE enrolments SET seen_at = now() WHERE seen_at IS NULL')
+    res.json({ data: { success: true } })
+  })
+)
+
+cmsRouter.delete(
+  '/admin/enrolments/:id',
+  admin,
+  wrap(async (req, res) => {
+    await query('DELETE FROM enrolments WHERE id::text = $1', [req.params.id ?? ''])
+    res.json({ data: { success: true } })
+  })
+)
+
