@@ -13,6 +13,7 @@ import { quizRouter } from './quiz/routes.js'
 import { storageRouter } from './storage/routes.js'
 import { learnRouter } from './learn/routes.js'
 import { cmsRouter } from './cms/routes.js'
+import { razorpayWebhook } from './payments/webhook.js'
 
 /**
  * Builds the Express app without binding a port.
@@ -58,6 +59,12 @@ export function createApp() {
       credentials: true,
     })
   )
+
+  // Razorpay signs the exact bytes it sends, so this route needs the raw body
+  // and must be registered before the JSON parser.
+  app.post('/api/payments/razorpay/webhook', express.raw({ type: '*/*', limit: '1mb' }), (req, res, next) => {
+    razorpayWebhook(req, res).catch(next)
+  })
 
   app.use(express.json({ limit: '2mb' }))
   app.use(cookieParser())

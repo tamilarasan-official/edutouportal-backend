@@ -20,6 +20,8 @@ export interface EnrolmentDetails {
   emailNote: string
   programmePageUrl: string | null
   source: string
+  /** "Paid ₹99 · Razorpay ref pay_…", "Pending", "" when no payment applies. */
+  payment: string
   createdAt: Date
 }
 
@@ -82,6 +84,7 @@ function scheduleRows(d: EnrolmentDetails): [string, string][] {
     ['Mode', s?.mode ?? ''],
     ['Language', s?.language ?? ''],
     ['Fee', d.price],
+    ['Payment', d.payment],
   ]
 }
 
@@ -137,6 +140,7 @@ export function teamEmail(d: EnrolmentDetails): RenderedEmail {
     ['Type', d.programmeType ?? ''],
     ['Date', d.schedule?.date ?? ''],
     ['Fee', d.price],
+    ['Payment', d.payment],
     ['Source', d.source],
     ['Received', d.createdAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) + ' IST'],
   ]

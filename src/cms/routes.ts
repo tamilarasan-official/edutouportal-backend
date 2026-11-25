@@ -6,6 +6,7 @@ import { query, queryOne } from '../db/pool.js'
 import { requireRole } from '../middleware/auth.js'
 import { mailFrom } from '../notify/mailer.js'
 import { enrolmentDetails, processOutbox, queueEnrolmentEmails, queueTestEmail } from '../notify/outbox.js'
+import { createOrder, toMinorUnits, verifyPaymentSignature } from '../payments/razorpay.js'
 import {
   categoryInputSchema,
   programmeDataSchema,
@@ -127,7 +128,7 @@ cmsRouter.get(
     ])
     const programmes = rows.map(shapeProgramme).map(({ id, slug, sortOrder, data }) => ({ id, slug, sortOrder, data }))
     res.setHeader('Cache-Control', 'public, max-age=15')
-    res.json({ data: { categories, domains: domains.items, enrolForm, programmes } })
+    res.json({ data: { categories, domains: domains.items, enrolForm, programmes, paymentsOnline: config.paymentsEnabled } })
   })
 )
 
@@ -204,8 +205,9 @@ cmsRouter.post(
     let programmeKey = 'general'
     let programmeTitle = 'General enquiry'
     let amount: number | null = null
-    let currency: string | null = null
+    let currency: 'INR' | 'USD' | null = null
     let paymentStatus = 'not_required'
+    let collectOnline = false
 
     if (r.programme) {
       const row = await queryOne<ProgrammeRow>(
@@ -223,40 +225,60 @@ cmsRouter.post(
       programmeKey = p.slug
       programmeTitle = p.data.title
       if (p.data.pricing.model === 'paid') {
+        // Always the server's price, never one sent by the browser.
         amount = p.data.pricing.amount
         currency = p.data.pricing.currency
         paymentStatus = 'pending'
+        collectOnline = p.data.payment.collectOnline && amount != null && amount > 0 && config.paymentsEnabled
       }
     }
 
     const whatsapp = `+91${r.phone}`
 
-    const clash = await queryOne<{ email_taken: boolean; phone_taken: boolean }>(
-      `SELECT bool_or(lower(email) = $2) AS email_taken, bool_or(whatsapp = $3) AS phone_taken
+    // Someone who started an online payment and did not finish may try again:
+    // their unpaid enrolment is reused. Anyone else is a duplicate.
+    const matches = await query<{ id: string; email_match: boolean; phone_match: boolean; payment_status: string; razorpay_order_id: string | null }>(
+      `SELECT id, lower(email) = $2 AS email_match, whatsapp = $3 AS phone_match, payment_status, razorpay_order_id
          FROM enrolments WHERE programme_key = $1 AND (lower(email) = $2 OR whatsapp = $3)`,
       [programmeKey, r.email, whatsapp]
     )
-    if (clash?.email_taken || clash?.phone_taken) {
+    const retry =
+      collectOnline && matches.length === 1 && matches[0]!.razorpay_order_id && matches[0]!.payment_status !== 'paid'
+        ? matches[0]!
+        : null
+    if (matches.length > 0 && !retry) {
       const errors: Record<string, string> = {}
-      if (clash.email_taken) errors.email = DUPLICATE_EMAIL
-      if (clash.phone_taken) errors.phone = DUPLICATE_PHONE
+      if (matches.some((m) => m.email_match)) errors.email = DUPLICATE_EMAIL
+      if (matches.some((m) => m.phone_match)) errors.phone = DUPLICATE_PHONE
       res.status(409).json({ error: { message: 'You are already enrolled for this programme.', code: 'ALREADY_ENROLLED', errors } })
       return
     }
 
     let enrolmentId: string
     try {
-      const row = await queryOne<{ id: string }>(
-        `INSERT INTO enrolments (programme_id, programme_key, programme_title, name, email, whatsapp, profession, city,
-                                 utm_source, utm_medium, utm_campaign, amount, currency, payment_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-         RETURNING id`,
-        [
-          programmeId, programmeKey, programmeTitle, r.name, r.email, whatsapp, r.profession, r.city,
-          r.utm_source || null, r.utm_medium || null, r.utm_campaign || null, amount, currency, paymentStatus,
-        ]
-      )
-      enrolmentId = row!.id
+      if (retry) {
+        await query(
+          `UPDATE enrolments
+              SET name = $2, email = $3, whatsapp = $4, profession = $5, city = $6, amount = $7, currency = $8,
+                  payment_status = 'pending', updated_at = now()
+            WHERE id = $1`,
+          [retry.id, r.name, r.email, whatsapp, r.profession, r.city, amount, currency]
+        )
+        enrolmentId = retry.id
+      } else {
+        const row = await queryOne<{ id: string }>(
+          `INSERT INTO enrolments (programme_id, programme_key, programme_title, name, email, whatsapp, profession, city,
+                                   utm_source, utm_medium, utm_campaign, amount, currency, payment_status, payment_provider)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+           RETURNING id`,
+          [
+            programmeId, programmeKey, programmeTitle, r.name, r.email, whatsapp, r.profession, r.city,
+            r.utm_source || null, r.utm_medium || null, r.utm_campaign || null, amount, currency, paymentStatus,
+            collectOnline ? 'razorpay' : null,
+          ]
+        )
+        enrolmentId = row!.id
+      }
     } catch (err) {
       const pg = err as { code?: string; constraint?: string }
       if (pg.code === '23505') {
@@ -268,22 +290,119 @@ cmsRouter.post(
       throw err
     }
 
-    // Confirmation + team emails: queued now, sent in the background. A mail
-    // problem must never turn a saved enrolment into an error for the visitor.
-    let whatsappGroupUrl = ''
-    let confirmationEmail = false
-    try {
-      await queueEnrolmentEmails(enrolmentId)
-      whatsappGroupUrl = (await enrolmentDetails(enrolmentId))?.whatsappGroupUrl ?? ''
-      confirmationEmail = Boolean(
-        await queryOne(`SELECT 1 FROM email_outbox WHERE enrolment_id = $1 AND kind = 'confirmation'`, [enrolmentId])
-      )
-    } catch (err) {
-      console.error('[mail] could not queue enrolment emails', err)
+    // Paid online: open Razorpay checkout. Emails go out once payment is verified.
+    if (collectOnline && amount != null && currency) {
+      let order
+      try {
+        order = await createOrder(amount, currency, enrolmentId, { enrolment_id: enrolmentId, programme: programmeKey })
+      } catch (err) {
+        console.error('[payments] could not create Razorpay order', err)
+        res.status(502).json({
+          error: { message: 'Online payment could not be started. Please try again in a moment.', code: 'PAYMENT_UNAVAILABLE' },
+        })
+        return
+      }
+      await query(`UPDATE enrolments SET razorpay_order_id = $2, payment_provider = 'razorpay' WHERE id = $1`, [enrolmentId, order.id])
+      res.status(201).json({
+        data: {
+          ok: true,
+          programme: programmeTitle,
+          payment: {
+            provider: 'razorpay',
+            keyId: config.RAZORPAY_KEY_ID,
+            orderId: order.id,
+            amount: toMinorUnits(amount),
+            currency,
+            name: 'Edutou',
+            description: programmeTitle,
+            prefill: { name: r.name, email: r.email, contact: whatsapp },
+          },
+        },
+      })
+      return
     }
-    processOutbox().catch((err) => console.error('[mail] send failed', err))
 
-    res.status(201).json({ data: { ok: true, programme: programmeTitle, whatsappGroupUrl, confirmationEmail } })
+    res.status(201).json({ data: { ok: true, programme: programmeTitle, ...(await sendEnrolmentEmails(enrolmentId)) } })
+  })
+)
+
+/**
+ * Queue the confirmation + team emails and start sending them in the
+ * background. A mail problem must never turn a saved enrolment into an error.
+ */
+async function sendEnrolmentEmails(enrolmentId: string): Promise<{ whatsappGroupUrl: string; confirmationEmail: boolean }> {
+  let whatsappGroupUrl = ''
+  let confirmationEmail = false
+  try {
+    await queueEnrolmentEmails(enrolmentId)
+    whatsappGroupUrl = (await enrolmentDetails(enrolmentId))?.whatsappGroupUrl ?? ''
+    confirmationEmail = Boolean(
+      await queryOne(`SELECT 1 FROM email_outbox WHERE enrolment_id = $1 AND kind = 'confirmation'`, [enrolmentId])
+    )
+  } catch (err) {
+    console.error('[mail] could not queue enrolment emails', err)
+  }
+  processOutbox().catch((err) => console.error('[mail] send failed', err))
+  return { whatsappGroupUrl, confirmationEmail }
+}
+
+/**
+ * Mark a Razorpay order's enrolment paid (idempotent) and, the first time,
+ * send its emails. Used by checkout verification and by the webhook.
+ */
+export async function markOrderPaid(orderId: string, paymentId: string): Promise<{ enrolmentId: string; programme: string; firstTime: boolean } | null> {
+  const updated = await queryOne<{ id: string; programme_title: string }>(
+    `UPDATE enrolments
+        SET payment_status = 'paid', paid_at = COALESCE(paid_at, now()), payment_reference = $2, updated_at = now()
+      WHERE razorpay_order_id = $1 AND payment_status <> 'paid'
+  RETURNING id, programme_title`,
+    [orderId, paymentId]
+  )
+  if (updated) {
+    await sendEnrolmentEmails(updated.id)
+    return { enrolmentId: updated.id, programme: updated.programme_title, firstTime: true }
+  }
+  const existing = await queryOne<{ id: string; programme_title: string }>(
+    `SELECT id, programme_title FROM enrolments WHERE razorpay_order_id = $1 AND payment_status = 'paid'`,
+    [orderId]
+  )
+  return existing ? { enrolmentId: existing.id, programme: existing.programme_title, firstTime: false } : null
+}
+
+export async function markOrderFailed(orderId: string): Promise<void> {
+  await query(
+    `UPDATE enrolments SET payment_status = 'failed', updated_at = now()
+      WHERE razorpay_order_id = $1 AND payment_status = 'pending'`,
+    [orderId]
+  )
+}
+
+const verifySchema = z.object({
+  orderId: z.string().trim().min(1).max(100),
+  paymentId: z.string().trim().min(1).max(100),
+  signature: z.string().trim().min(1).max(200),
+})
+
+/** Razorpay Checkout success handler posts here; the signature proves the payment. */
+cmsRouter.post(
+  '/enrol/verify',
+  enrolLimiter,
+  wrap(async (req, res) => {
+    const parsed = verifySchema.safeParse(req.body ?? {})
+    if (!parsed.success || !verifyPaymentSignature(parsed.data.orderId, parsed.data.paymentId, parsed.data.signature)) {
+      res.status(400).json({ error: { message: 'We could not verify this payment. If money was deducted, contact us and we will sort it out.', code: 'PAYMENT_UNVERIFIED' } })
+      return
+    }
+    const result = await markOrderPaid(parsed.data.orderId, parsed.data.paymentId)
+    if (!result) {
+      res.status(404).json({ error: { message: 'Enrolment for this payment was not found.', code: 'NOT_FOUND' } })
+      return
+    }
+    const d = await enrolmentDetails(result.enrolmentId)
+    const confirmationEmail = Boolean(
+      await queryOne(`SELECT 1 FROM email_outbox WHERE enrolment_id = $1 AND kind = 'confirmation'`, [result.enrolmentId])
+    )
+    res.json({ data: { ok: true, paid: true, programme: result.programme, whatsappGroupUrl: d?.whatsappGroupUrl ?? '', confirmationEmail } })
   })
 )
 
@@ -585,7 +704,7 @@ cmsRouter.get(
     const rows = await query(
       `SELECT id, programme_id, programme_key, programme_title, name, email, whatsapp, profession, city,
               utm_source, utm_medium, utm_campaign, status, notes, seen_at, amount, currency,
-              payment_status, payment_provider, payment_reference, paid_at, created_at, updated_at,
+              payment_status, payment_provider, payment_reference, razorpay_order_id, paid_at, created_at, updated_at,
               (SELECT o.status FROM email_outbox o WHERE o.enrolment_id = enrolments.id AND o.kind = 'confirmation'
                 ORDER BY o.created_at DESC LIMIT 1) AS confirmation_email,
               (SELECT o.status FROM email_outbox o WHERE o.enrolment_id = enrolments.id AND o.kind = 'team'
@@ -740,5 +859,31 @@ cmsRouter.get(
       .replace(/\s*:\s*$/, '')
       .trim()
     res.json({ data: { url: `https://wa.me/${d.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, text } })
+  })
+)
+
+// ---------------------------------------------------------------------------
+// Admin: payments
+// ---------------------------------------------------------------------------
+
+cmsRouter.get(
+  '/admin/payments/status',
+  admin,
+  wrap(async (_req, res) => {
+    const keyId = config.RAZORPAY_KEY_ID ?? ''
+    const totals = await query<{ currency: string; paid: number; amount: string }>(
+      `SELECT currency, count(*)::int AS paid, COALESCE(sum(amount), 0)::text AS amount
+         FROM enrolments WHERE payment_status = 'paid' AND currency IS NOT NULL GROUP BY currency`
+    )
+    res.json({
+      data: {
+        configured: config.paymentsEnabled,
+        mode: keyId.startsWith('rzp_live_') ? 'live' : keyId.startsWith('rzp_test_') ? 'test' : null,
+        keyId: keyId ? `${keyId.slice(0, 9)}…${keyId.slice(-4)}` : '',
+        webhookConfigured: Boolean(config.RAZORPAY_WEBHOOK_SECRET),
+        webhookUrl: `${config.PUBLIC_URL.replace(/\/+$/, '')}/api/payments/razorpay/webhook`,
+        totals,
+      },
+    })
   })
 )

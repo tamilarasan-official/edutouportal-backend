@@ -124,12 +124,26 @@ export const programmeDataSchema = z.object({
     .object({
       /** free → "Free" badge; paid → price badge; hidden → no price shown. */
       model: z.enum(['free', 'paid', 'hidden']).default('free'),
+      /** What people pay. */
       amount: z.number().min(0).max(10_000_000).nullable().default(null),
-      currency: z.string().trim().toUpperCase().length(3).default('INR'),
+      currency: z
+        .string()
+        .trim()
+        .toUpperCase()
+        .pipe(z.enum(['INR', 'USD']))
+        .catch('INR')
+        .default('INR'),
+      /** Strike-through "was" price (e.g. 199 for an offer price of 99), shown when enabled. */
+      showCompareAt: z.boolean().default(false),
+      compareAtAmount: z.number().min(0).max(10_000_000).nullable().default(null),
       /** Optional wording instead of the number, e.g. "Fees depend on the plan". */
       note: str(200),
     })
-    .default({}),
+    .default({})
+    .refine(
+      (p) => !p.showCompareAt || p.compareAtAmount == null || p.amount == null || p.compareAtAmount > p.amount,
+      { message: 'The original (strike-through) price must be higher than the price', path: ['compareAtAmount'] }
+    ),
 
   /** What enrolled people receive for this programme. */
   enrolment: z
@@ -149,8 +163,9 @@ export const programmeDataSchema = z.object({
   /** Placeholders for the payment gateway, wired up once a provider is chosen. */
   payment: z
     .object({
+      /** Paid programmes: take payment with Razorpay on the enrol page. */
       collectOnline: z.boolean().default(false),
-      provider: str(40),
+      provider: str(40).default('razorpay'),
       productRef: str(120),
     })
     .default({}),

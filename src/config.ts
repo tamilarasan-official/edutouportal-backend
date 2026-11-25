@@ -201,6 +201,15 @@ const EnvSchema = z.object({
   ADMIN_URL: z.string().default('https://admin.edutou.in'),
   /** Public website, linked from confirmation emails. */
   SITE_URL: z.string().default('https://edutou.in'),
+
+  /**
+   * Razorpay online payments for paid programmes. Test keys start with
+   * rzp_test_. The webhook secret is the one set on the Razorpay dashboard
+   * webhook (Settings > Webhooks) pointing at /api/payments/razorpay/webhook.
+   */
+  RAZORPAY_KEY_ID: z.string().optional(),
+  RAZORPAY_KEY_SECRET: z.string().optional(),
+  RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
 })
 
 const parsed = EnvSchema.safeParse(process.env)
@@ -257,6 +266,7 @@ export const config = {
   googleEnabled: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
   storageDriver,
   mailEnabled: Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS),
+  paymentsEnabled: Boolean(env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET),
 } as const
 
 export type Config = typeof config

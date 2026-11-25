@@ -1,6 +1,7 @@
 import { config } from '../config.js'
 import { query, queryOne } from '../db/pool.js'
 import { programmeDataSchema, settingsDefaults, settingsSchemas } from '../cms/schema.js'
+import { formatMoney, priceLabel } from '../cms/price.js'
 import { mailer, mailFrom } from './mailer.js'
 import { confirmationEmail, teamEmail, testEmail, type EnrolmentDetails, type RenderedEmail } from './templates.js'
 
@@ -20,15 +21,6 @@ async function setting<K extends 'notifications' | 'enrol_form'>(key: K) {
   const row = await queryOne<{ value: unknown }>('SELECT value FROM cms_settings WHERE key = $1', [key])
   const parsed = row ? settingsSchemas[key].safeParse(row.value) : null
   return (parsed?.success ? parsed.data : settingsDefaults[key]) as (typeof settingsDefaults)[K]
-}
-
-function priceLabel(p: { model: string; amount: number | null; currency: string; note: string }): string {
-  if (p.model === 'free') return 'Free'
-  if (p.model !== 'paid') return ''
-  if (p.amount != null) {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: p.currency || 'INR', maximumFractionDigits: 0 }).format(p.amount)
-  }
-  return p.note || ''
 }
 
 function formatDate(iso: string): string {
@@ -51,6 +43,10 @@ interface EnrolmentRow {
   utm_source: string | null
   utm_medium: string | null
   utm_campaign: string | null
+  payment_status: string
+  amount: string | null
+  currency: string | null
+  payment_reference: string | null
   created_at: Date
 }
 
@@ -58,7 +54,7 @@ interface EnrolmentRow {
 export async function enrolmentDetails(enrolmentId: string): Promise<EnrolmentDetails | null> {
   const e = await queryOne<EnrolmentRow>(
     `SELECT id, programme_id, programme_key, programme_title, name, email, whatsapp, profession, city,
-            utm_source, utm_medium, utm_campaign, created_at
+            utm_source, utm_medium, utm_campaign, payment_status, amount, currency, payment_reference, created_at
        FROM enrolments WHERE id = $1`,
     [enrolmentId]
   )
@@ -95,6 +91,14 @@ export async function enrolmentDetails(enrolmentId: string): Promise<EnrolmentDe
     emailNote: data?.enrolment.emailNote ?? '',
     programmePageUrl: data?.page.enabled && prog ? `${site}/programmes/${data.category}/${prog.slug}` : null,
     source: [e.utm_source, e.utm_medium, e.utm_campaign].filter(Boolean).join(' / ') || 'Website',
+    payment:
+      e.payment_status === 'paid'
+        ? `Paid${e.amount ? ` ${formatMoney(Number(e.amount), e.currency ?? 'INR')}` : ''}${e.payment_reference ? ` · Razorpay ref ${e.payment_reference}` : ''}`
+        : e.payment_status === 'pending'
+          ? 'Pending'
+          : e.payment_status === 'failed'
+            ? 'Failed'
+            : '',
     createdAt: e.created_at,
   }
 }
