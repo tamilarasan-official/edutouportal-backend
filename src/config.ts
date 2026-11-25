@@ -210,6 +210,12 @@ const EnvSchema = z.object({
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+
+  /**
+   * Microsoft Clarity Data Export token (Clarity > Settings > Data Export >
+   * Generate new API token). Powers the Analytics page in the admin.
+   */
+  CLARITY_API_TOKEN: z.string().optional(),
 })
 
 const parsed = EnvSchema.safeParse(process.env)

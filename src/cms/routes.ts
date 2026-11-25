@@ -7,6 +7,7 @@ import { requireRole } from '../middleware/auth.js'
 import { mailFrom } from '../notify/mailer.js'
 import { enrolmentDetails, processOutbox, queueEnrolmentEmails, queueTestEmail } from '../notify/outbox.js'
 import { createOrder, toMinorUnits, verifyPaymentSignature } from '../payments/razorpay.js'
+import { CLARITY_DAYS, CLARITY_REPORTS, ClarityError, clarityReport, type ClarityReport } from '../analytics/clarity.js'
 import {
   categoryInputSchema,
   programmeDataSchema,
@@ -116,10 +117,11 @@ async function assertCategoriesExist(data: ProgrammeData): Promise<string | null
 cmsRouter.get(
   '/site',
   wrap(async (_req, res) => {
-    const [categories, domains, enrolForm, rows] = await Promise.all([
+    const [categories, domains, enrolForm, analytics, rows] = await Promise.all([
       loadCategories(),
       loadSetting('domains'),
       loadSetting('enrol_form'),
+      loadSetting('analytics'),
       query<ProgrammeRow>(
         `SELECT id, slug, status, sort_order, data, published_at, created_at, updated_at
            FROM cms_programmes WHERE status = 'published'
@@ -128,7 +130,16 @@ cmsRouter.get(
     ])
     const programmes = rows.map(shapeProgramme).map(({ id, slug, sortOrder, data }) => ({ id, slug, sortOrder, data }))
     res.setHeader('Cache-Control', 'public, max-age=15')
-    res.json({ data: { categories, domains: domains.items, enrolForm, programmes, paymentsOnline: config.paymentsEnabled } })
+    res.json({
+      data: {
+        categories,
+        domains: domains.items,
+        enrolForm,
+        programmes,
+        paymentsOnline: config.paymentsEnabled,
+        analytics: { clarityProjectId: analytics.clarityEnabled ? analytics.clarityProjectId : '' },
+      },
+    })
   })
 )
 
@@ -885,5 +896,50 @@ cmsRouter.get(
         totals,
       },
     })
+  })
+)
+
+// ---------------------------------------------------------------------------
+// Admin: Analytics & Event Tracking (Microsoft Clarity)
+// ---------------------------------------------------------------------------
+
+cmsRouter.get(
+  '/admin/analytics/status',
+  admin,
+  wrap(async (_req, res) => {
+    const a = await loadSetting('analytics')
+    const base = a.clarityProjectId ? `https://clarity.microsoft.com/projects/view/${a.clarityProjectId}` : ''
+    res.json({
+      data: {
+        enabled: a.clarityEnabled && Boolean(a.clarityProjectId),
+        projectId: a.clarityProjectId,
+        tokenConfigured: Boolean(config.CLARITY_API_TOKEN),
+        days: CLARITY_DAYS,
+        links: base
+          ? { dashboard: `${base}/dashboard`, recordings: `${base}/impressions`, heatmaps: `${base}/heatmaps`, settings: `${base}/settings` }
+          : null,
+      },
+    })
+  })
+)
+
+cmsRouter.get(
+  '/admin/analytics/clarity',
+  admin,
+  wrap(async (req, res) => {
+    const report = String(req.query.report ?? 'overview') as ClarityReport
+    if (!Object.prototype.hasOwnProperty.call(CLARITY_REPORTS, report)) {
+      res.status(400).json({ error: { message: 'Unknown report', code: 'BAD_REQUEST' } })
+      return
+    }
+    try {
+      res.json({ data: await clarityReport(report, { refresh: req.query.refresh === '1' }) })
+    } catch (err) {
+      if (err instanceof ClarityError) {
+        res.status(err.status).json({ error: { message: err.message, code: 'CLARITY' } })
+        return
+      }
+      throw err
+    }
   })
 )

@@ -273,6 +273,16 @@ export const settingsSchemas = {
       'Hi {name}, thank you for registering for {programme} with Edutou! Join the WhatsApp group for updates: {whatsapp}'
     ),
   }),
+  /** Website analytics. Microsoft Clarity loads on edutou.in when enabled. */
+  analytics: z.object({
+    clarityEnabled: z.boolean().default(true),
+    clarityProjectId: z
+      .string()
+      .trim()
+      .max(40)
+      .refine((v) => v === '' || /^[a-z0-9]{4,40}$/i.test(v), 'Letters and numbers only, as shown in the Clarity project URL')
+      .default('zjabfz0mvo'),
+  }),
 } as const
 
 export type SettingsKey = keyof typeof settingsSchemas
@@ -281,4 +291,5 @@ export const settingsDefaults = {
   domains: { items: ['AI', 'CSE', 'ECE', 'EEE', 'Robotics', 'Drone', 'AMR', 'VLSI', 'PCB'] },
   enrol_form: settingsSchemas.enrol_form.parse({}),
   notifications: settingsSchemas.notifications.parse({}),
+  analytics: settingsSchemas.analytics.parse({}),
 }
