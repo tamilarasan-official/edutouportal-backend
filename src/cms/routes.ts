@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { config } from '../config.js'
 import { query, queryOne } from '../db/pool.js'
 import { requireRole } from '../middleware/auth.js'
+import { mailFrom } from '../notify/mailer.js'
+import { enrolmentDetails, processOutbox, queueEnrolmentEmails, queueTestEmail } from '../notify/outbox.js'
 import {
   categoryInputSchema,
   programmeDataSchema,
@@ -242,16 +244,19 @@ cmsRouter.post(
       return
     }
 
+    let enrolmentId: string
     try {
-      await query(
+      const row = await queryOne<{ id: string }>(
         `INSERT INTO enrolments (programme_id, programme_key, programme_title, name, email, whatsapp, profession, city,
                                  utm_source, utm_medium, utm_campaign, amount, currency, payment_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         RETURNING id`,
         [
           programmeId, programmeKey, programmeTitle, r.name, r.email, whatsapp, r.profession, r.city,
           r.utm_source || null, r.utm_medium || null, r.utm_campaign || null, amount, currency, paymentStatus,
         ]
       )
+      enrolmentId = row!.id
     } catch (err) {
       const pg = err as { code?: string; constraint?: string }
       if (pg.code === '23505') {
@@ -263,7 +268,22 @@ cmsRouter.post(
       throw err
     }
 
-    res.status(201).json({ data: { ok: true, programme: programmeTitle } })
+    // Confirmation + team emails: queued now, sent in the background. A mail
+    // problem must never turn a saved enrolment into an error for the visitor.
+    let whatsappGroupUrl = ''
+    let confirmationEmail = false
+    try {
+      await queueEnrolmentEmails(enrolmentId)
+      whatsappGroupUrl = (await enrolmentDetails(enrolmentId))?.whatsappGroupUrl ?? ''
+      confirmationEmail = Boolean(
+        await queryOne(`SELECT 1 FROM email_outbox WHERE enrolment_id = $1 AND kind = 'confirmation'`, [enrolmentId])
+      )
+    } catch (err) {
+      console.error('[mail] could not queue enrolment emails', err)
+    }
+    processOutbox().catch((err) => console.error('[mail] send failed', err))
+
+    res.status(201).json({ data: { ok: true, programme: programmeTitle, whatsappGroupUrl, confirmationEmail } })
   })
 )
 
@@ -565,7 +585,13 @@ cmsRouter.get(
     const rows = await query(
       `SELECT id, programme_id, programme_key, programme_title, name, email, whatsapp, profession, city,
               utm_source, utm_medium, utm_campaign, status, notes, seen_at, amount, currency,
-              payment_status, payment_provider, payment_reference, paid_at, created_at, updated_at
+              payment_status, payment_provider, payment_reference, paid_at, created_at, updated_at,
+              (SELECT o.status FROM email_outbox o WHERE o.enrolment_id = enrolments.id AND o.kind = 'confirmation'
+                ORDER BY o.created_at DESC LIMIT 1) AS confirmation_email,
+              (SELECT o.status FROM email_outbox o WHERE o.enrolment_id = enrolments.id AND o.kind = 'team'
+                ORDER BY o.created_at DESC LIMIT 1) AS team_email,
+              (SELECT o.last_error FROM email_outbox o WHERE o.enrolment_id = enrolments.id AND o.last_error IS NOT NULL
+                ORDER BY o.created_at DESC LIMIT 1) AS email_error
          FROM enrolments ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY created_at DESC LIMIT $${params.length}`,
       params as never[]
@@ -627,3 +653,92 @@ cmsRouter.delete(
   })
 )
 
+
+// ---------------------------------------------------------------------------
+// Admin: email
+// ---------------------------------------------------------------------------
+
+cmsRouter.get(
+  '/admin/email/status',
+  admin,
+  wrap(async (_req, res) => {
+    const counts = await queryOne<{ pending: number; failed: number; sent_today: number }>(
+      `SELECT count(*) FILTER (WHERE status IN ('pending', 'sending'))::int AS pending,
+              count(*) FILTER (WHERE status = 'failed')::int AS failed,
+              count(*) FILTER (WHERE status = 'sent' AND sent_at > now() - interval '1 day')::int AS sent_today
+         FROM email_outbox`
+    )
+    res.json({ data: { configured: config.mailEnabled, from: mailFrom(), ...counts } })
+  })
+)
+
+cmsRouter.post(
+  '/admin/email/test',
+  admin,
+  wrap(async (req, res) => {
+    const parsed = z.object({ to: z.string().trim().toLowerCase().email() }).safeParse(req.body)
+    if (!parsed.success) return validationError(res, parsed.error)
+    if (!config.mailEnabled) {
+      res.status(409).json({
+        error: { message: 'Email is not set up on the server yet (SMTP_HOST, SMTP_USER, SMTP_PASS).', code: 'MAIL_NOT_CONFIGURED' },
+      })
+      return
+    }
+    await queueTestEmail(parsed.data.to)
+    await processOutbox()
+    const last = await queryOne<{ status: string; last_error: string | null }>(
+      `SELECT status, last_error FROM email_outbox WHERE kind = 'test' ORDER BY created_at DESC LIMIT 1`
+    )
+    if (last?.status === 'sent') {
+      res.json({ data: { sent: true } })
+      return
+    }
+    res.status(502).json({ error: { message: `Sending failed: ${last?.last_error ?? 'unknown error'}`, code: 'MAIL_FAILED' } })
+  })
+)
+
+cmsRouter.post(
+  '/admin/enrolments/:id/resend-email',
+  admin,
+  wrap(async (req, res) => {
+    const parsed = z.object({ kinds: z.array(z.enum(['confirmation', 'team'])).min(1).default(['confirmation']) }).safeParse(req.body ?? {})
+    if (!parsed.success) return validationError(res, parsed.error)
+    const id = req.params.id ?? ''
+    if (!/^[0-9a-f-]{36}$/i.test(id) || !(await queryOne('SELECT 1 FROM enrolments WHERE id = $1', [id]))) {
+      res.status(404).json({ error: { message: 'Enrolment not found', code: 'NOT_FOUND' } })
+      return
+    }
+    // Resending is an explicit action, so it ignores the on/off switches.
+    const before = await queueEnrolmentEmailsForced(id, parsed.data.kinds)
+    await processOutbox()
+    res.json({ data: { queued: before } })
+  })
+)
+
+/** Like queueEnrolmentEmails, but sends even if the admin has switched a kind off. */
+async function queueEnrolmentEmailsForced(id: string, kinds: ('confirmation' | 'team')[]): Promise<number> {
+  return queueEnrolmentEmails(id, kinds, { force: true })
+}
+
+cmsRouter.get(
+  '/admin/enrolments/:id/whatsapp',
+  admin,
+  wrap(async (req, res) => {
+    const id = req.params.id ?? ''
+    const d = /^[0-9a-f-]{36}$/i.test(id) ? await enrolmentDetails(id) : null
+    if (!d) {
+      res.status(404).json({ error: { message: 'Enrolment not found', code: 'NOT_FOUND' } })
+      return
+    }
+    const row = await queryOne<{ value: unknown }>(`SELECT value FROM cms_settings WHERE key = 'notifications'`)
+    const parsedSettings = row ? settingsSchemas.notifications.safeParse(row.value) : null
+    const template = (parsedSettings?.success ? parsedSettings.data : settingsDefaults.notifications).whatsappMessage
+    const text = template
+      .replace(/\{name\}/g, d.name)
+      .replace(/\{programme\}/g, d.programmeTitle)
+      .replace(/\{whatsapp\}/g, d.whatsappGroupUrl)
+      .replace(/\s*:\s*$/, '')
+      .trim()
+    res.json({ data: { url: `https://wa.me/${d.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, text } })
+  })
+)

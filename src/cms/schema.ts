@@ -131,6 +131,21 @@ export const programmeDataSchema = z.object({
     })
     .default({}),
 
+  /** What enrolled people receive for this programme. */
+  enrolment: z
+    .object({
+      /** WhatsApp group invite (https://chat.whatsapp.com/...). Falls back to the enrol form's general link. */
+      whatsappGroupUrl: z
+        .string()
+        .trim()
+        .max(500)
+        .refine((v) => v === '' || /^https:\/\//i.test(v), 'Must be an https:// URL')
+        .default(''),
+      /** Extra paragraph in the confirmation email, e.g. joining instructions. */
+      emailNote: str(1500),
+    })
+    .default({}),
+
   /** Placeholders for the payment gateway, wired up once a provider is chosen. */
   payment: z
     .object({
@@ -224,6 +239,25 @@ export const settingsSchemas = {
       .refine((v) => v === '' || /^https:\/\//i.test(v), 'Must be an https:// URL')
       .default(''),
   }),
+  notifications: z.object({
+    /** Confirmation email to the person who enrolled. */
+    sendConfirmation: z.boolean().default(true),
+    confirmationSubject: str(200).default('Your registration for {programme} is confirmed'),
+    confirmationIntro: str(1500).default(
+      "Thank you for registering with Edutou. We have received your registration and our team will be in touch with the next steps."
+    ),
+    confirmationSignoff: str(500).default('Team Edutou'),
+    /** Notification email to the team for every enrolment. */
+    sendTeam: z.boolean().default(true),
+    teamEmails: z
+      .array(z.string().trim().toLowerCase().email('Not a valid email address'))
+      .max(20)
+      .default(['ceo@edutou.in', 'bewin@edutou.in', 'sujan@edutou.in', 'contact@edutou.in', 'whitedevil@edutou.in']),
+    /** Pre-filled text for the one-click "Send WhatsApp" button in the admin. */
+    whatsappMessage: str(1000).default(
+      'Hi {name}, thank you for registering for {programme} with Edutou! Join the WhatsApp group for updates: {whatsapp}'
+    ),
+  }),
 } as const
 
 export type SettingsKey = keyof typeof settingsSchemas
@@ -231,4 +265,5 @@ export type SettingsKey = keyof typeof settingsSchemas
 export const settingsDefaults = {
   domains: { items: ['AI', 'CSE', 'ECE', 'EEE', 'Robotics', 'Drone', 'AMR', 'VLSI', 'PCB'] },
   enrol_form: settingsSchemas.enrol_form.parse({}),
+  notifications: settingsSchemas.notifications.parse({}),
 }

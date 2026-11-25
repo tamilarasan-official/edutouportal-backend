@@ -185,6 +185,22 @@ const EnvSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   // Where the browser lands after OAuth completes.
   FRONTEND_URL: z.string().default('http://localhost:3000'),
+
+  /**
+   * Outgoing email (enrolment confirmations and team notifications).
+   * Google Workspace: SMTP_HOST=smtp.gmail.com, SMTP_PORT=465, SMTP_USER=the
+   * mailbox, SMTP_PASS=an app password. Unset = emails are queued, not sent.
+   */
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(465),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  /** e.g. "Edutou <contact@edutou.in>". Defaults to SMTP_USER. */
+  MAIL_FROM: z.string().optional(),
+  /** Linked from team notification emails. */
+  ADMIN_URL: z.string().default('https://admin.edutou.in'),
+  /** Public website, linked from confirmation emails. */
+  SITE_URL: z.string().default('https://edutou.in'),
 })
 
 const parsed = EnvSchema.safeParse(process.env)
@@ -240,6 +256,7 @@ export const config = {
     .filter(Boolean),
   googleEnabled: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
   storageDriver,
+  mailEnabled: Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS),
 } as const
 
 export type Config = typeof config

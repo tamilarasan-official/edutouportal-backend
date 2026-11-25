@@ -8,6 +8,7 @@ import { attachRealtime } from './realtime/hub.js'
 import { purgeExpiredTokens } from './auth/tokens.js'
 import { bootstrapAdmin } from './auth/bootstrap.js'
 import { seedCmsIfEmpty } from './cms/seed.js'
+import { startOutboxWorker } from './notify/outbox.js'
 
 const server = createServer(createApp())
 
@@ -28,6 +29,9 @@ async function start(): Promise<void> {
   // First start against an empty CMS: load the starting programmes. A no-op
   // afterwards, so admin edits are never overwritten.
   await seedCmsIfEmpty().catch((err) => console.error('[cms] seeding failed:', err))
+
+  // Enrolment confirmation and team emails (sent in the background).
+  startOutboxWorker()
 
   attachRealtime(server)
 
