@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1102.0",
+    "@whiskeysockets/baileys": "6.7.24",
     "argon2": "^0.41.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -31,6 +32,7 @@
     "multer": "^2.0.2",
     "nodemailer": "^6.10.1",
     "pg": "^8.13.1",
+    "qrcode": "1.5.4",
     "sharp": "^0.35.3",
     "ws": "^8.18.0",
     "zod": "^3.24.1"
@@ -43,6 +45,7 @@
     "@types/node": "^22.10.2",
     "@types/nodemailer": "^6.4.24",
     "@types/pg": "^8.11.10",
+    "@types/qrcode": "1.5.5",
     "@types/ws": "^8.5.13",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

@@ -282,7 +282,52 @@ export const settingsSchemas = {
       .max(40)
       .refine((v) => v === '' || /^[a-z0-9]{4,40}$/i.test(v), 'Letters and numbers only, as shown in the Clarity project URL')
       .default('zjabfz0mvo'),
+    /** Google tag (Tag Manager GTM-…, or Analytics G-…) on the website. */
+    googleEnabled: z.boolean().default(true),
+    googleTagId: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .max(30)
+      .refine((v) => v === '' || /^(GTM|G|AW)-[A-Z0-9]{4,16}$/.test(v), 'Use the ID from Google, e.g. GTM-XXXXXXX or G-XXXXXXXXXX')
+      .default('GTM-MF7QXGND'),
   }),
+  /**
+   * WhatsApp messages from the owner's number (linked device). Sent in small
+   * batches with random gaps so the number does not look automated.
+   */
+  whatsapp: z
+    .object({
+      /** Queue a message for every new enrolment. */
+      enabled: z.boolean().default(true),
+      /** Stop sending (the queue keeps filling). */
+      paused: z.boolean().default(false),
+      batchMin: z.number().int().min(1).max(20).default(2),
+      batchMax: z.number().int().min(1).max(20).default(5),
+      gapMinSeconds: z.number().int().min(5).max(3600).default(20),
+      gapMaxSeconds: z.number().int().min(5).max(3600).default(90),
+      pauseMinMinutes: z.number().int().min(1).max(720).default(5),
+      pauseMaxMinutes: z.number().int().min(1).max(720).default(15),
+      /** Most messages in any 24 hours. */
+      dailyCap: z.number().int().min(1).max(500).default(40),
+      /** Sending window in IST hours; 0-24 means around the clock. */
+      startHour: z.number().int().min(0).max(23).default(0),
+      endHour: z.number().int().min(1).max(24).default(24),
+      /** One is picked at random per message. {name}, {programme}, {whatsapp}. */
+      templates: z
+        .array(z.string().trim().min(1).max(1000))
+        .min(1)
+        .max(10)
+        .default([
+          'Hi {name}, thank you for registering for {programme} with Edutou! Join the WhatsApp group for updates: {whatsapp}',
+          'Hello {name}! Your registration for {programme} is confirmed. Please join our WhatsApp group to get all the updates: {whatsapp}',
+          'Hi {name}, welcome to Edutou! We have received your registration for {programme}. Join the group here for details: {whatsapp}',
+        ]),
+    })
+    .refine((w) => w.batchMin <= w.batchMax, { message: 'Batch minimum must not exceed the maximum', path: ['batchMin'] })
+    .refine((w) => w.gapMinSeconds <= w.gapMaxSeconds, { message: 'Minimum gap must not exceed the maximum', path: ['gapMinSeconds'] })
+    .refine((w) => w.pauseMinMinutes <= w.pauseMaxMinutes, { message: 'Minimum pause must not exceed the maximum', path: ['pauseMinMinutes'] })
+    .refine((w) => w.startHour < w.endHour, { message: 'Start hour must be before end hour', path: ['startHour'] }),
 } as const
 
 export type SettingsKey = keyof typeof settingsSchemas
@@ -292,4 +337,5 @@ export const settingsDefaults = {
   enrol_form: settingsSchemas.enrol_form.parse({}),
   notifications: settingsSchemas.notifications.parse({}),
   analytics: settingsSchemas.analytics.parse({}),
+  whatsapp: settingsSchemas.whatsapp.parse({}),
 }

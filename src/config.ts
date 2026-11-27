@@ -216,6 +216,16 @@ const EnvSchema = z.object({
    * Generate new API token). Powers the Analytics page in the admin.
    */
   CLARITY_API_TOKEN: z.string().optional(),
+
+  /**
+   * "true" runs the WhatsApp sender in this process: a linked-device session
+   * on the owner's number (QR scan from the admin) that sends queued messages
+   * slowly. Run only ONE API instance with this on.
+   */
+  WHATSAPP_ENABLED: z
+    .string()
+    .optional()
+    .transform((v) => ['true', '1', 'yes'].includes((v ?? '').trim().toLowerCase())),
 })
 
 const parsed = EnvSchema.safeParse(process.env)

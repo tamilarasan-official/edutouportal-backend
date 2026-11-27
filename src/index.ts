@@ -9,6 +9,7 @@ import { purgeExpiredTokens } from './auth/tokens.js'
 import { bootstrapAdmin } from './auth/bootstrap.js'
 import { seedCmsIfEmpty } from './cms/seed.js'
 import { startOutboxWorker } from './notify/outbox.js'
+import { startWhatsApp } from './whatsapp/connection.js'
 
 const server = createServer(createApp())
 
@@ -32,6 +33,11 @@ async function start(): Promise<void> {
 
   // Enrolment confirmation and team emails (sent in the background).
   startOutboxWorker()
+
+  // WhatsApp messages from the owner's number (linked device), if switched on.
+  if (config.WHATSAPP_ENABLED && config.NODE_ENV !== 'test') {
+    startWhatsApp().catch((err) => console.error('[whatsapp] could not start', err))
+  }
 
   attachRealtime(server)
 

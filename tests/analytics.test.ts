@@ -42,6 +42,7 @@ describe('clarity on the website', () => {
   it('gives the website the project id, and none when switched off', async () => {
     let site = (await new Client(base).get('/api/cms/site')).body.data
     assert.equal(site.analytics.clarityProjectId, 'zjabfz0mvo')
+    assert.equal(site.analytics.googleTagId, 'GTM-MF7QXGND')
 
     const a = await adminUser()
     assert.equal((await a.client.request('PUT', '/api/cms/admin/settings/analytics', { clarityEnabled: false, clarityProjectId: 'zjabfz0mvo' })).status, 200)
@@ -50,6 +51,10 @@ describe('clarity on the website', () => {
 
     const bad = await a.client.request('PUT', '/api/cms/admin/settings/analytics', { clarityEnabled: true, clarityProjectId: '"><script>' })
     assert.equal(bad.status, 422)
+    const badTag = await a.client.request('PUT', '/api/cms/admin/settings/analytics', { googleTagId: 'GTM-1"><script>' })
+    assert.equal(badTag.status, 422)
+    assert.equal((await a.client.request('PUT', '/api/cms/admin/settings/analytics', { googleEnabled: false })).status, 200)
+    assert.equal((await new Client(base).get('/api/cms/site')).body.data.analytics.googleTagId, '')
   })
 })
 

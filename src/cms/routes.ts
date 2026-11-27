@@ -8,6 +8,8 @@ import { mailFrom } from '../notify/mailer.js'
 import { enrolmentDetails, processOutbox, queueEnrolmentEmails, queueTestEmail } from '../notify/outbox.js'
 import { createOrder, toMinorUnits, verifyPaymentSignature } from '../payments/razorpay.js'
 import { CLARITY_DAYS, CLARITY_REPORTS, ClarityError, clarityReport, type ClarityReport } from '../analytics/clarity.js'
+import { backfill, backfillCount, queueStats, queueWhatsApp } from '../whatsapp/queue.js'
+import { connect as whatsappConnect, logout as whatsappLogout, whatsappStatus } from '../whatsapp/connection.js'
 import {
   categoryInputSchema,
   programmeDataSchema,
@@ -137,7 +139,10 @@ cmsRouter.get(
         enrolForm,
         programmes,
         paymentsOnline: config.paymentsEnabled,
-        analytics: { clarityProjectId: analytics.clarityEnabled ? analytics.clarityProjectId : '' },
+        analytics: {
+          clarityProjectId: analytics.clarityEnabled ? analytics.clarityProjectId : '',
+          googleTagId: analytics.googleEnabled ? analytics.googleTagId : '',
+        },
       },
     })
   })
@@ -346,6 +351,7 @@ async function sendEnrolmentEmails(enrolmentId: string): Promise<{ whatsappGroup
   let confirmationEmail = false
   try {
     await queueEnrolmentEmails(enrolmentId)
+    await queueWhatsApp(enrolmentId).catch((err) => console.error('[whatsapp] could not queue', err))
     whatsappGroupUrl = (await enrolmentDetails(enrolmentId))?.whatsappGroupUrl ?? ''
     confirmationEmail = Boolean(
       await queryOne(`SELECT 1 FROM email_outbox WHERE enrolment_id = $1 AND kind = 'confirmation'`, [enrolmentId])
@@ -721,7 +727,8 @@ cmsRouter.get(
               (SELECT o.status FROM email_outbox o WHERE o.enrolment_id = enrolments.id AND o.kind = 'team'
                 ORDER BY o.created_at DESC LIMIT 1) AS team_email,
               (SELECT o.last_error FROM email_outbox o WHERE o.enrolment_id = enrolments.id AND o.last_error IS NOT NULL
-                ORDER BY o.created_at DESC LIMIT 1) AS email_error
+                ORDER BY o.created_at DESC LIMIT 1) AS email_error,
+              (SELECT w.status FROM whatsapp_outbox w WHERE w.enrolment_id = enrolments.id LIMIT 1) AS whatsapp_status
          FROM enrolments ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY created_at DESC LIMIT $${params.length}`,
       params as never[]
@@ -941,5 +948,111 @@ cmsRouter.get(
       }
       throw err
     }
+  })
+)
+
+// ---------------------------------------------------------------------------
+// Admin: WhatsApp (owner's number, linked device)
+// ---------------------------------------------------------------------------
+
+cmsRouter.get(
+  '/admin/whatsapp/status',
+  admin,
+  wrap(async (_req, res) => {
+    res.json({
+      data: {
+        enabledOnServer: config.WHATSAPP_ENABLED,
+        connection: whatsappStatus(),
+        stats: await queueStats(),
+        backfillCount: await backfillCount(),
+      },
+    })
+  })
+)
+
+cmsRouter.post(
+  '/admin/whatsapp/connect',
+  admin,
+  wrap(async (_req, res) => {
+    if (!config.WHATSAPP_ENABLED) {
+      res.status(409).json({ error: { message: 'WhatsApp is not switched on for the server (WHATSAPP_ENABLED=true).', code: 'WHATSAPP_OFF' } })
+      return
+    }
+    await whatsappConnect()
+    res.json({ data: whatsappStatus() })
+  })
+)
+
+cmsRouter.post(
+  '/admin/whatsapp/logout',
+  admin,
+  wrap(async (_req, res) => {
+    await whatsappLogout()
+    res.json({ data: whatsappStatus() })
+  })
+)
+
+cmsRouter.post(
+  '/admin/whatsapp/backfill',
+  admin,
+  wrap(async (req, res) => {
+    if (req.query.dry === '1') {
+      res.json({ data: { count: await backfillCount() } })
+      return
+    }
+    res.json({ data: { queued: await backfill() } })
+  })
+)
+
+const WA_STATUSES = ['pending', 'sending', 'sent', 'failed', 'skipped', 'not_on_whatsapp'] as const
+
+cmsRouter.get(
+  '/admin/whatsapp/queue',
+  admin,
+  wrap(async (req, res) => {
+    const status = String(req.query.status ?? '')
+    const params: unknown[] = []
+    let where = ''
+    if ((WA_STATUSES as readonly string[]).includes(status)) {
+      params.push(status)
+      where = 'WHERE w.status = $1'
+    }
+    params.push(Math.min(Math.max(Number(req.query.limit) || 300, 1), 2000))
+    const rows = await query(
+      `SELECT w.id, w.enrolment_id, w.to_number, w.body, w.status, w.attempts, w.last_error, w.sent_at, w.created_at,
+              e.name, e.programme_title
+         FROM whatsapp_outbox w LEFT JOIN enrolments e ON e.id = w.enrolment_id
+         ${where}
+        ORDER BY (w.status IN ('pending', 'sending')) DESC, COALESCE(w.sent_at, w.created_at) DESC
+        LIMIT $${params.length}`,
+      params as never[]
+    )
+    res.json({ data: rows })
+  })
+)
+
+cmsRouter.post(
+  '/admin/whatsapp/queue/:id/:action',
+  admin,
+  wrap(async (req, res) => {
+    const id = req.params.id ?? ''
+    const action = req.params.action
+    if (!/^[0-9a-f-]{36}$/i.test(id) || (action !== 'retry' && action !== 'skip')) {
+      res.status(400).json({ error: { message: 'Invalid request', code: 'BAD_REQUEST' } })
+      return
+    }
+    const row =
+      action === 'retry'
+        ? await queryOne(
+            `UPDATE whatsapp_outbox SET status = 'pending', attempts = 0, last_error = NULL
+              WHERE id = $1 AND status IN ('failed', 'skipped', 'not_on_whatsapp') RETURNING id`,
+            [id]
+          )
+        : await queryOne(`UPDATE whatsapp_outbox SET status = 'skipped' WHERE id = $1 AND status = 'pending' RETURNING id`, [id])
+    if (!row) {
+      res.status(409).json({ error: { message: 'That message cannot be changed now.', code: 'CONFLICT' } })
+      return
+    }
+    res.json({ data: { success: true } })
   })
 )
